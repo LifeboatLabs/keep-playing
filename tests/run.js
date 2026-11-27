@@ -303,6 +303,86 @@ test('sign-in can return combined info in one go', async () => {
   await t.stop();
 });
 
+// The same requests and checks as the test page in Microsoft's PlayFab
+// JavaScript SDK (PlayFabTestingExample/PlayFabApiTest.js), written out here.
+test('passes the checks Microsoft\'s JavaScript SDK test page makes', async () => {
+  const t = await start();
+  const sdk = { 'X-PlayFabSDK': 'JavaScriptSDK-1.222.260922' };
+  // PlayFab.GenerateErrorReport: the message, then each detail.
+  const report = (e) => [e.errorMessage, ...Object.entries(e.errorDetails || {}).map(([k, v]) => `${k}: ${v.join(', ')}`)].join('\n');
+
+  // InvalidLogin
+  await t.ok('/Client/RegisterPlayFabUser', { TitleId: '1A2B3', Username: 'realuser', Email: 'nobody@example.com', Password: 'right-password' }, sdk);
+  const invalid = await t.call('/Client/LoginWithEmailAddress', { TitleId: '1A2B3', Email: 'nobody@example.com', Password: 'INVALID' }, sdk);
+  assert.notEqual(invalid.code, 200);
+  assert.ok(invalid.errorMessage.toLowerCase().includes('password'), invalid.errorMessage);
+
+  // InvalidRegistration
+  const reg = await t.call('/Client/RegisterPlayFabUser', { TitleId: '1A2B3', Username: 'x', Email: 'x', Password: 'x' }, sdk);
+  assert.notEqual(reg.code, 200);
+  assert.ok(report(reg).toLowerCase().includes('email address is not valid.'), report(reg));
+  assert.ok(report(reg).toLowerCase().includes('password must be between'), report(reg));
+
+  // LoginOrRegister
+  const login = await t.ok('/Client/LoginWithCustomID', { TitleId: '1A2B3', CustomId: 'jbuild_javascriptsdk_test', CreateAccount: true }, sdk);
+  const auth = { ...sdk, 'X-Authorization': login.SessionTicket };
+
+  // GetEntityToken
+  const token = await t.ok('/Authentication/GetEntityToken', {}, auth);
+  const entity = { ...sdk, 'X-EntityToken': token.EntityToken };
+  const key = { Id: token.Entity.Id, Type: token.Entity.Type };
+
+  // EntityObjects
+  const objs1 = await t.ok('/Object/GetObjects', { Entity: key, EscapeObject: true }, entity);
+  let n = objs1.Objects.testCounter ? JSON.parse(objs1.Objects.testCounter.EscapedDataObject) : 0;
+  n = (n + 1) % 100;
+  await t.ok('/Object/SetObjects', { Entity: key, Objects: [{ ObjectName: 'testCounter', DataObject: n }] }, entity);
+  const objs2 = await t.ok('/Object/GetObjects', { Entity: key, EscapeObject: true }, entity);
+  assert.equal(JSON.parse(objs2.Objects.testCounter.EscapedDataObject), n);
+
+  // UserDataApi: the SDK test sends a number where PlayFab expects text.
+  const data1 = await t.ok('/Client/GetUserData', {}, auth);
+  let counter = data1.Data.testCounter ? parseInt(data1.Data.testCounter.Value, 10) : 1;
+  counter = (counter + 1) % 100;
+  await t.ok('/Client/UpdateUserData', { Data: { testCounter: counter } }, auth);
+  const data2 = await t.ok('/Client/GetUserData', {}, auth);
+  assert.equal(parseInt(data2.Data.testCounter.Value, 10), counter);
+  const updated = new Date(data2.Data.testCounter.LastUpdated).getTime();
+  assert.ok(Math.abs(updated - t.clock.now.getTime()) <= 5 * 60 * 1000);
+
+  // PlayerStatisticsApi
+  const stats1 = await t.ok('/Client/GetPlayerStatistics', {}, auth);
+  let stat = (stats1.Statistics.find((x) => x.StatisticName === 'str') || { Value: 0 }).Value;
+  stat = (stat + 1) % 100;
+  await t.ok('/Client/UpdatePlayerStatistics', { Statistics: [{ StatisticName: 'str', Value: stat }] }, auth);
+  const stats2 = await t.ok('/Client/GetPlayerStatistics', {}, auth);
+  assert.equal(stats2.Statistics.find((x) => x.StatisticName === 'str').Value, stat);
+
+  // UserCharacter
+  await t.ok('/Client/GetAllUsersCharacters', {}, auth);
+
+  // LeaderBoard, from the client and from the server
+  const lbC = await t.ok('/Client/GetLeaderboard', { MaxResultsCount: 3, StartPosition: 0, StatisticName: 'str' }, auth);
+  assert.ok(lbC.Leaderboard.length > 0);
+  const lbS = await t.ok('/Server/GetLeaderboard', { MaxResultsCount: 3, StartPosition: 0, StatisticName: 'str' }, { ...sdk, ...t.secret });
+  assert.ok(lbS.Leaderboard.length > 0);
+
+  // AccountInfo
+  const info = await t.ok('/Client/GetAccountInfo', {}, auth);
+  assert.ok(info.AccountInfo.TitleInfo.Origination.length > 0);
+
+  // CloudScript and CloudScriptError
+  const hello = await t.ok('/Client/ExecuteCloudScript', { FunctionName: 'helloWorld' }, auth);
+  assert.equal(hello.FunctionResult.messageValue, `Hello ${login.PlayFabId}!`);
+  const broken = await t.ok('/Client/ExecuteCloudScript', { FunctionName: 'throwError' }, auth);
+  assert.equal(broken.FunctionResult, undefined);
+  assert.equal(broken.Error.Error, 'JavascriptException');
+
+  // WriteEvent
+  await t.ok('/Client/WritePlayerEvent', { EventName: 'ForumPostEvent', Body: { Subject: 'My First Post', Body: 'This is my awesome post.' } }, auth);
+  await t.stop();
+});
+
 // ---------------------------------------------------------------- data
 
 test('player data: save, read, remove, versions and privacy', async () => {
@@ -323,6 +403,12 @@ test('player data: save, read, remove, versions and privacy', async () => {
   const after = await t.ok('/Client/GetUserData', { Keys: ['level', 'secret', 'name'] }, a.auth);
   assert.deepEqual(Object.keys(after.Data), ['name']);
   await t.err('/Client/UpdateUserData', { Data: { '!bad': '1' } }, a.auth, 'InvalidParams');
+  // Numbers sent for text are turned into text, like PlayFab does.
+  await t.ok('/Client/UpdateUserData', { Data: { counter: 7, flag: true } }, a.auth);
+  const coerced = await t.ok('/Client/GetUserData', { Keys: ['counter', 'flag'] }, a.auth);
+  assert.equal(coerced.Data.counter.Value, '7');
+  assert.equal(coerced.Data.flag.Value, 'true');
+  await t.err('/Client/UpdateUserData', { Data: { nested: { no: 1 } } }, a.auth, 'InvalidParams');
   await t.stop();
 });
 
@@ -855,6 +941,8 @@ test('every call Keep Playing answers gives an answer that matches the descripti
     ['/Profile/SetProfileLanguage', { Entity: A.entityKey, Language: 'en-GB' }],
     ['/Profile/SetDisplayName', { Entity: A.entityKey, DisplayName: 'Smoke Entity' }],
     ['/Profile/GetProfile', { Entity: { Id: '1A2B3', Type: 'title' } }, null, titleToken],
+    ['/Client/GetAllUsersCharacters', {}],
+    ['/Server/GetAllUsersCharacters', { PlayFabId: A.id }],
     ['/Server/DeletePlayer', { PlayFabId: D.id }],
     ['/Admin/DeletePlayer', { PlayFabId: E.id }],
     ['/Admin/RemoveVirtualCurrencyTypes', { VirtualCurrencies: [{ CurrencyCode: 'GE' }] }],

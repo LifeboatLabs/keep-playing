@@ -61,6 +61,9 @@ function checkSingle(api, prop, value, where, out, opts) {
   }
   switch (prop[JSONTYPE]) {
     case 'String':
+      // PlayFab turns numbers and true/false into text when a field wants text
+      // (Microsoft's own SDK tests rely on it), so requests may send them.
+      if (opts.lenient && (typeof value === 'number' || typeof value === 'boolean')) return;
       if (typeof value !== 'string') return out.push(`${where} should be text`);
       if (actual === 'DateTime' && Number.isNaN(Date.parse(value))) out.push(`${where} should be a date`);
       return;
@@ -127,7 +130,7 @@ function requestProblems(api, typeName, body) {
     }
     if (v === undefined || v === null) continue;
     const problems = [];
-    checkValue(api, prop, v, prop[NAME], problems, { strict: false, required: false });
+    checkValue(api, prop, v, prop[NAME], problems, { strict: false, required: false, lenient: true });
     if (problems.length) details[prop[NAME]] = problems;
   }
   return Object.keys(details).length ? details : null;

@@ -7,6 +7,12 @@ handlers.helloWorld = function (args, context) {
   return { messageValue: message };
 };
 
+// Fails on purpose, to show what a script error looks like to the game.
+handlers.throwError = function (args, context) {
+  var missing;
+  return missing.notThere;
+};
+
 // Gives a daily reward once a day, using read-only data the player can't change.
 handlers.claimDailyReward = function (args, context) {
   var today = new Date().toISOString().slice(0, 10);

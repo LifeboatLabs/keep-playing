@@ -13,8 +13,8 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 
 This is an early version (0.1).
 
-- **It answers 192 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
-- **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check more than 350 answers this way, and they try every call that Keep Playing answers.
+- **It answers 194 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
+- **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check almost 400 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
 - **It hasn't been tried with a real game yet.** If you make games or mods with PlayFab, please try it and [tell us what broke](https://github.com/LifeboatLabs/keep-playing/issues).
 
 ## Why
