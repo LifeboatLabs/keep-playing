@@ -1,0 +1,2 @@
+# Windows needs these with CRLF line endings, exactly as they are.
+*.cmd -text

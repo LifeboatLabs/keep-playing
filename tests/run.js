@@ -1135,6 +1135,82 @@ test("https: Keep Playing's own certificate works, and only for this computer", 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test("connecting a game by name: its PlayFab address over https, the hosts file, and finding the title ID", async () => {
+  const connect = require('../tools/connect');
+  const { args } = require('../server');
+
+  // The command line: --title-id means https on the usual port, for that address.
+  const opts = args(['--title-id', '1A2B3']);
+  assert.deepEqual([opts.https, opts.port, opts.addresses], [true, 443, ['1a2b3.playfabapi.com']]);
+  assert.equal(args(['--title-id', '1A2B3', '--port', '9443']).port, 9443);
+  assert.throws(() => args(['--title-id', 'a.b']), /doesn't look like a PlayFab title ID/);
+
+  // The certificate covers the game's address too, still isn't a certificate
+  // authority, and a new one is made when the addresses change.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-tls-'));
+  const now = new Date('2026-11-27T10:00:00Z');
+  const made = tlsCert.loadOrCreate(dir, now, ['1a2b3.playfabapi.com']);
+  const x = new crypto.X509Certificate(made.cert);
+  assert.equal(x.subjectAltName, 'DNS:localhost, DNS:1a2b3.playfabapi.com, IP Address:127.0.0.1, IP Address:0:0:0:0:0:0:0:1');
+  assert.equal(x.ca, false);
+  assert.equal(tlsCert.loadOrCreate(dir, now, ['1A2B3.playfabapi.com']).made, false);
+  assert.equal(tlsCert.loadOrCreate(dir, now, ['ffff.playfabapi.com']).made, true);
+  assert.equal(tlsCert.loadOrCreate(dir, now).made, true); // back to this computer only
+  assert.throws(() => tlsCert.makeCertificate(now, ['not a name']), /isn't an address a certificate can cover/);
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  // A game calling https://1a2b3.playfabapi.com gets Keep Playing, and the file
+  // addresses it's given use that name. Other PlayFab addresses are refused.
+  const live = tlsCert.makeCertificate(new Date(), ['1a2b3.playfabapi.com']);
+  const app = createApp({ titleDir: EXAMPLE });
+  const server = https.createServer({ cert: live.cert, key: live.key }, (req, res) => app.handle(req, res));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const post = (name, url, body, headers = {}) => new Promise((resolve) => {
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = https.request({ host: '127.0.0.1', port: server.address().port, path: url, method: 'POST', ca: live.cert, servername: name,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length, Host: name, ...headers } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(Buffer.concat(chunks).toString()) }));
+    });
+    req.on('error', (e) => resolve({ error: e.code }));
+    req.end(payload);
+  });
+  const login = await post('1a2b3.playfabapi.com', '/Client/LoginWithCustomID', { TitleId: '1A2B3', CustomId: 'by-name', CreateAccount: true });
+  assert.equal(login.status, 200, JSON.stringify(login));
+  const up = await post('1a2b3.playfabapi.com', '/File/InitiateFileUploads', { Entity: login.json.data.EntityToken.Entity, FileNames: ['a.sav'] },
+    { 'X-EntityToken': login.json.data.EntityToken.EntityToken });
+  assert.match(up.json.data.UploadDetails[0].UploadUrl, /^https:\/\/1a2b3\.playfabapi\.com\/files\//);
+  assert.equal((await post('ffff.playfabapi.com', '/Client/GetTime', {})).error, 'ERR_TLS_CERT_ALTNAME_INVALID');
+  server.close();
+  app.close();
+
+  // Finding the title ID in what `ipconfig /displaydns` prints, in any language.
+  // Title IDs are hexadecimal, so PlayFab's other addresses aren't mistaken for one.
+  const dns = [
+    'Windows IP Configuration', '', '    1a2b3.playfabapi.com', '    ----------------------------------------',
+    '    Record Name . . . . . : 1a2b3.playfabapi.com', '    CNAME Record  . . . . : playfabapi.trafficmanager.net', '',
+    "    Nom d'enregistrement. : 9CB5C.playfabapi.com", '    www.playfabapi.com', '    api.playfabapi.com', '    x.1a2b4.playfabapi.com',
+  ].join('\r\n');
+  assert.deepEqual(connect.findTitleIds(dns), ['1A2B3', '9CB5C']);
+  assert.deepEqual(connect.findTitleIds('no games here'), []);
+
+  // The hosts file: only Keep Playing's own lines change, and undoing puts it back exactly.
+  const hosts = '# Copyright (c) 1993-2009 Microsoft Corp.\r\n#\r\n#\t127.0.0.1       localhost\r\n10.0.0.5 nas.local\r\n';
+  const added = connect.editHosts(hosts, ['1a2b3.playfabapi.com']);
+  assert.equal(added, `${hosts}127.0.0.1 1a2b3.playfabapi.com # Keep Playing\r\n`);
+  assert.ok(connect.hostsSend(added, ['1a2b3.playfabapi.com']));
+  assert.ok(!connect.hostsSend(hosts, ['1a2b3.playfabapi.com']));
+  assert.equal(connect.editHosts(added, ['1a2b3.playfabapi.com']), added); // twice is the same as once
+  const swapped = connect.editHosts(added, ['ffff.playfabapi.com']);
+  assert.equal(swapped, `${hosts}127.0.0.1 ffff.playfabapi.com # Keep Playing\r\n`);
+  assert.equal(connect.editHosts(swapped, []), hosts);
+  assert.deepEqual(connect.ours(hosts), []);
+  assert.equal(connect.editHosts('10.0.0.5 nas.local', ['ab.playfabapi.com']), '10.0.0.5 nas.local\r\n127.0.0.1 ab.playfabapi.com # Keep Playing\r\n');
+  assert.equal(connect.editHosts('a\nb\n', []), 'a\nb\n'); // the file's own line endings stay
+  assert.equal(connect.thumbprint(live.cert), crypto.createHash('sha1').update(new crypto.X509Certificate(live.cert).raw).digest('hex').toUpperCase());
+});
+
 test('groups: roles, applications, invitations, blocks and members', async () => {
   const t = await start();
   const [ana, ben, cat, dan, eve] = [await t.player('ana'), await t.player('ben'), await t.player('cat'), await t.player('dan'), await t.player('eve')];

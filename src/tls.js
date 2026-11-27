@@ -1,11 +1,14 @@
 'use strict';
-// HTTPS for games that won't talk plain http (most Unreal games, for one).
+// HTTPS for games that won't talk plain http (most Unreal games, for one), and
+// for games that can only be sent here by name (see tools/connect.js).
 //
 // Keep Playing makes its own certificate, with nothing but Node's crypto, and
-// keeps it in the data folder. It's only for this computer's own addresses
-// (localhost, 127.0.0.1 and ::1), and it says it can't vouch for anything else
-// (it isn't a certificate authority), so telling Windows or a game to trust it
-// can't be used against any other website.
+// keeps it in the data folder. It covers this computer's own addresses
+// (localhost, 127.0.0.1 and ::1), plus any game addresses it's asked for (like
+// 1a2b3.playfabapi.com, for a game whose PlayFab address the hosts file sends
+// here). It says it can't vouch for anything else (it isn't a certificate
+// authority), so telling Windows or a game to trust it can't be used against
+// any other website.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -70,15 +73,39 @@ const OID = {
 const extension = (id, critical, value) => seq(oid(id), ...(critical ? [bool(true)] : []), octets(value));
 const name = (cn) => seq(set(seq(oid(OID.organization), utf8('Keep Playing'))), set(seq(oid(OID.commonName), utf8(cn))));
 
-/** Makes a new key and self-signed certificate. Returns { cert, key } as PEM text. */
-function makeCertificate(now = new Date()) {
+const LABEL = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** The address a game calls for a PlayFab title ID (1A2B3 → 1a2b3.playfabapi.com). */
+function playfabAddress(titleId) {
+  const id = String(titleId || '');
+  if (!/^[A-Za-z0-9]{1,16}$/.test(id)) throw new Error(`"${id}" doesn't look like a PlayFab title ID (letters and numbers, like 1A2B3)`);
+  return `${id.toLowerCase()}.playfabapi.com`;
+}
+
+// The DNS names a certificate should cover: localhost, then the game addresses, once each.
+function namesFor(extra) {
+  const out = ['localhost'];
+  for (const n of extra || []) {
+    const name = String(n).toLowerCase();
+    if (name.length > 253 || !name.split('.').every((l) => LABEL.test(l))) throw new Error(`"${n}" isn't an address a certificate can cover`);
+    if (!out.includes(name)) out.push(name);
+  }
+  return out;
+}
+
+/**
+ * Makes a new key and self-signed certificate for this computer's own addresses
+ * and any game addresses in `names`. Returns { cert, key } as PEM text.
+ */
+function makeCertificate(now = new Date(), names = []) {
+  const dns = namesFor(names);
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
   const spki = publicKey.export({ type: 'spki', format: 'der' });
   const serial = crypto.randomBytes(16);
   serial[0] &= 0x7f;
   const algorithm = seq(oid(OID.ecdsaWithSHA256));
   const altNames = seq(
-    tlv(0x82, Buffer.from('localhost')),
+    ...dns.map((n) => tlv(0x82, Buffer.from(n))),
     tlv(0x87, Buffer.from([127, 0, 0, 1])),
     tlv(0x87, Buffer.from([...new Array(15).fill(0), 1])),
   );
@@ -107,28 +134,36 @@ function makeCertificate(now = new Date()) {
   };
 }
 
+// The DNS names a certificate covers, sorted.
+function coveredNames(x) {
+  return String(x.subjectAltName || '').split(', ').filter((s) => s.startsWith('DNS:')).map((s) => s.slice(4)).sort();
+}
+
 /**
- * The certificate in <dir>, made (or renewed, when it has under a month left)
- * if needed. Returns { cert, key, certFile, made }.
+ * The certificate in <dir> for this computer and the game addresses in `names`.
+ * A new one is made if there isn't one, if it covers different addresses, or if
+ * it has under a month left. Returns { cert, key, certFile, made }.
  */
-function loadOrCreate(dir, now = new Date()) {
+function loadOrCreate(dir, now = new Date(), names = []) {
   const certFile = path.join(dir, 'keep-playing.crt');
   const keyFile = path.join(dir, 'keep-playing.key');
+  const wanted = namesFor(names).sort();
   try {
     const cert = fs.readFileSync(certFile, 'utf8');
     const key = fs.readFileSync(keyFile, 'utf8');
     const x = new crypto.X509Certificate(cert);
-    if (Date.parse(x.validTo) - now.getTime() > RENEW_DAYS * 24 * 60 * 60 * 1000 && x.checkPrivateKey(crypto.createPrivateKey(key))) {
+    if (Date.parse(x.validTo) - now.getTime() > RENEW_DAYS * 24 * 60 * 60 * 1000 && x.checkPrivateKey(crypto.createPrivateKey(key))
+      && coveredNames(x).join(' ') === wanted.join(' ')) {
       return { cert, key, certFile, made: false };
     }
   } catch (e) {
     // missing or unreadable: make a new one
   }
-  const made = makeCertificate(now);
+  const made = makeCertificate(now, names);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(keyFile, made.key, { mode: 0o600 });
   fs.writeFileSync(certFile, made.cert);
   return { ...made, certFile, made: true };
 }
 
-module.exports = { makeCertificate, loadOrCreate };
+module.exports = { makeCertificate, loadOrCreate, playfabAddress };

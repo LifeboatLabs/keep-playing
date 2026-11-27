@@ -2,35 +2,32 @@
 
 This is for modders and players who want to see whether a game whose PlayFab services have gone can work again. You'll need the game itself (your own copy) and a little patience.
 
-## 1. Start Keep Playing so it shows every call
-
-```
-node server.js --verbose
-```
-
-Every call the game makes is printed as it happens. Calls Keep Playing can't answer yet are printed as a note.
-
-## 2. Point the game at it
+## 1. Point the game at Keep Playing
 
 How you do this depends on the game.
 
-- **Unreal Engine games** that use the PlayFab plugin read the address from `Engine.ini`, under `[/Script/PlayFab.PlayFabRuntimeSettings]`. Look in the game's `Saved\Config\WindowsNoEditor` (or `Windows`) folder. The plugin only connects over HTTPS, so run a free [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) (`cloudflared tunnel --url http://localhost:8080`) and use the address it prints:
+- **Most games have the address built in** (`https://TITLEID.playfabapi.com`). On Windows, start the game and wait until it says it can't connect. Then double-click **connect-game.cmd** in the Keep Playing folder. It finds the game's PlayFab address, sends it to this computer through the hosts file, asks Windows to trust Keep Playing's certificate, and starts Keep Playing. Windows asks before each change, and **disconnect-game.cmd** takes them back. The [README](../README.md#games-you-cant-change) says more.
+- **Unreal Engine games** that use the PlayFab plugin often keep their own list of trusted certificates, so the way above isn't enough. They read the address from `Engine.ini`, under `[/Script/PlayFab.PlayFabRuntimeSettings]` (look in the game's `Saved\Config\WindowsNoEditor` or `Windows` folder). Start Keep Playing with `node server.js --https --verbose`, and add:
 
   ```ini
   [/Script/PlayFab.PlayFabRuntimeSettings]
   TitleId=
-  ProductionEnvironmentURL=something.trycloudflare.com
+  ProductionEnvironmentURL=127.0.0.1:8443
+
+  [/Script/Engine.NetworkSettings]
+  n.VerifyPeer=False
   ```
 
-  [OVERKILL's The Walking Dead](../games/otwd) connects this way.
-- **Games with a setting or a config file for the PlayFab address**: put Keep Playing's address there. If it starts with `http`, the SDKs use it exactly as written (see the [README](../README.md#point-your-game-at-it)).
-- **Games with the address built in** (`https://TITLEID.playfabapi.com`) are harder, because the game expects PlayFab's own certificate. [Open an issue](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md) and tell us about the game, and we'll work it out together.
+  [OVERKILL's The Walking Dead](../games/otwd) connects this way, and its README explains each line.
+- **Games with a setting or a config file for the PlayFab address**: start Keep Playing with `node server.js --verbose` and put its address there. If it starts with `http`, the SDKs use it exactly as written (see the [README](../README.md#point-your-game-at-it)).
 
-## 3. Play, then look at what the game asked for
+With `--verbose`, every call the game makes is printed as it happens.
 
-Open http://localhost:8080/status in a browser. Under `seen` it lists every call the game made, how many times it made it, and which ones failed. This shows you straight away what's missing.
+## 2. Play, then look at what the game asked for
 
-## 4. Fill in what's game-specific
+Open Keep Playing's page in a browser: the address connect-game.cmd opened, or http://localhost:8080 (https://localhost:8443 with `--https`). It lists every call the game made, how many times, and which ones Keep Playing couldn't answer yet. This shows you straight away what's missing.
+
+## 3. Fill in what's game-specific
 
 Most of what a game needs is its own settings and logic:
 
@@ -40,9 +37,9 @@ Most of what a game needs is its own settings and logic:
 
 Start the server with your folder: `node server.js --verbose --title my-game`. [title-example](../title-example) has one of every file, and [games/otwd](../games/otwd) is a real one.
 
-## 5. Tell us how it went
+## 4. Tell us how it went
 
-[Open a game report](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md), and paste the `seen` list from the status page. If the game works, we'd love to add its folder to [games](../games), with credit to you.
+Click **Report on GitHub** on Keep Playing's page: it opens a report with the calls the game made already filled in. Or [open a game report](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md) yourself. If the game works, we'd love to add its folder to [games](../games), with credit to you.
 
 ## The lines we keep
 

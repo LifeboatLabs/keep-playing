@@ -14,7 +14,7 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 This is an early version (0.1).
 
 - **It answers 353 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
-- **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check almost 400 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
+- **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check over 700 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
 - **It hasn't been tried with a real game yet.** If you make games or mods with PlayFab, please try it and [tell us what broke](https://github.com/LifeboatLabs/keep-playing/issues).
 
 ## Why
@@ -42,7 +42,7 @@ Open http://localhost:8080 in a browser to see what's going on: how many players
 
 ![Keep Playing's page in a browser, listing the calls a game has made and one it can't answer yet](docs/status-page.png)
 
-Options: `--port 9000`, `--data ./saves` (where players are kept, `./data` by default), `--verbose` (show every call), `--https` (for games that only use https; see [Games that need https](#games-that-need-https)), and `--host 0.0.0.0` (let other computers on your network connect; by default only your own computer can).
+Options: `--port 9000`, `--data ./saves` (where players are kept, `./data` by default), `--verbose` (show every call), `--https` (for games that only use https; see [Games that need https](#games-that-need-https)), `--title-id 1A2B3` (answer at that game's PlayFab address; see [Games you can't change](#games-you-cant-change)), and `--host 0.0.0.0` (let other computers on your network connect; by default only your own computer can).
 
 ## Point your game at it
 
@@ -80,6 +80,29 @@ The game will only accept the certificate once it trusts it. There are two ways 
   The game then stops checking every secure connection it makes, not just the ones to Keep Playing. Only do this for a game whose servers are gone, and remove the lines if they ever come back.
 
 To use a certificate of your own instead, start Keep Playing with `--cert yourcert.pem --key yourkey.pem`.
+
+### Games you can't change
+
+A finished game calls PlayFab at an address that's built in, like `https://1a2b3.playfabapi.com`, and only trusts PlayFab's own certificate. On Windows, Keep Playing can still answer it, without changing any of the game's files:
+
+1. Install [Node.js](https://nodejs.org/) (the LTS version). Download Keep Playing (the green **Code** button at the top of this page, then **Download ZIP**) and unzip it.
+2. Start the game, and wait until it says it can't connect.
+3. Double-click **connect-game.cmd** in the Keep Playing folder. If Windows warns you about running it, choose **Run** (or **More info**, then **Run anyway**). Press Enter when it asks.
+4. It finds the address the game asked for. Then Windows asks two things: whether it may make changes to your device, and whether to install a certificate. Click **Yes** both times.
+5. When it says **It works**, start the game again, and keep the window open while you play. Your browser opens Keep Playing's page, which shows each call the game makes.
+
+To put everything back, close the window and double-click **disconnect-game.cmd**.
+
+What it changes, and why:
+
+- **One line in Windows' hosts file** (`C:\Windows\System32\drivers\etc\hosts`), which says the game's PlayFab address is this computer. The line ends in `# Keep Playing`, so it's easy to spot.
+- **Keep Playing's certificate, trusted for your Windows user only.** It isn't a certificate authority: it only covers this computer and the game's PlayFab address, so it can't be used to pretend to be any other website.
+
+While it's connected, that game can't reach PlayFab at all, so only use it for a game whose servers are gone. To try it without a game, type `kptest` when it asks for a title ID. Your browser should open Keep Playing's page at `https://kptest.playfabapi.com/`.
+
+Some games keep their own list of trusted certificates and still say no. Many Unreal games do this; see [Games that need https](#games-that-need-https). If your game doesn't connect, [tell us about it](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md).
+
+On macOS or Linux, do the same by hand: add `127.0.0.1 1a2b3.playfabapi.com` to `/etc/hosts`, start `node server.js --title-id 1A2B3` (port 443 needs `sudo` on Linux), and trust `data/tls/keep-playing.crt`.
 
 ## Your game's settings
 
@@ -155,7 +178,7 @@ Keep Playing is for games whose official servers are gone, or for studios planni
 - **Players bring their own copy.** This project never shares game files.
 - **No unlocking things people didn't pay for**, no cheats, and no getting around copy protection.
 
-Pointing a finished game at a new address can be fiddly. It's a job for the game's own studio, or for modders who know that game. [Trying a game with Keep Playing](docs/testing-a-game.md) explains how, step by step.
+On Windows, **connect-game.cmd** sends most games to Keep Playing without changing any of their files (see [Games you can't change](#games-you-cant-change)). [Trying a game with Keep Playing](docs/testing-a-game.md) explains the rest, step by step.
 
 ## For studios: an end-of-life plan
 

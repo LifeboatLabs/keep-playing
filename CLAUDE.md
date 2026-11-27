@@ -20,6 +20,11 @@ same family as Done With To Do, Done With Windows 10 and Save Your Game. Not aff
 - `spec/calls.json`: generated from Microsoft's PlayFab/API_Specs (Apache-2.0) by `tools/gen-spec.js`.
 - `title-example/`: a complete example title folder; the tests use it.
 - `tools/export-title.js`: saves a real PlayFab title's settings into a title folder (read-only Admin calls).
+- `tools/connect.js` (run by `connect-game.cmd` / `disconnect-game.cmd`, CRLF, see .gitattributes): Windows only.
+  Finds a game's title ID in `ipconfig /displaydns`, adds `127.0.0.1 <id>.playfabapi.com # Keep Playing` to the hosts
+  file (elevated, only PlayFab addresses), trusts the certificate in CurrentUser\Root with certutil, then runs
+  `server.js --title-id` (https, port 443, certificate also covers that address). `--undo` removes both. The Windows
+  parts (UAC, certutil, PowerShell) can't run in the tests; the hosts editing and title ID finding are tested.
 - `games/<game>/`: title folders for particular dead games, each with a README (how to connect, credits,
   the lines) and a test in tests/run.js that replays the calls the game makes. Credit fan work and keep its licence.
 
