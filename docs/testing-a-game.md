@@ -6,7 +6,7 @@ This is for modders and players who want to see whether a game whose PlayFab ser
 
 How you do this depends on the game.
 
-- **Most games have the address built in** (`https://TITLEID.playfabapi.com`). On Windows, start the game and wait until it says it can't connect. Then double-click **connect-game.cmd** in the Keep Playing folder. It finds the game's PlayFab address, sends it to this computer through the hosts file, asks Windows to trust Keep Playing's certificate, and starts Keep Playing. Windows asks before each change, and **disconnect-game.cmd** takes them back. The [README](../README.md#games-you-cant-change) says more.
+- **Most games have the address built in** (`https://TITLEID.playfabapi.com`). On Windows, start the game and wait until it says it can't connect. Then double-click **connect-game.cmd** in the Keep Playing folder. It finds the game's PlayFab address, sends it to this computer through the hosts file, asks Windows to trust Keep Playing's certificate, and starts Keep Playing. Windows asks before each change, and **disconnect-game.cmd** takes them back. This is new and hasn't been tried on a real Windows PC yet, so please tell us how it goes. The [README](../README.md#games-you-cant-change) says more.
 - **Unreal Engine games** that use the PlayFab plugin often keep their own list of trusted certificates, so the way above isn't enough. They read the address from `Engine.ini`, under `[/Script/PlayFab.PlayFabRuntimeSettings]` (look in the game's `Saved\Config\WindowsNoEditor` or `Windows` folder). Start Keep Playing with `node server.js --https --verbose`, and add:
 
   ```ini

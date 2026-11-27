@@ -83,6 +83,8 @@ To use a certificate of your own instead, start Keep Playing with `--cert yource
 
 ### Games you can't change
 
+> **This is new, and it hasn't been tried on a real Windows PC yet.** It's been tested everywhere except the Windows parts: the request to change the hosts file, and Windows trusting the certificate. If you try it, please [tell us how it went](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md), even if it worked. Trying it without a game (see below) is a help too.
+
 A finished game calls PlayFab at an address that's built in, like `https://1a2b3.playfabapi.com`, and only trusts PlayFab's own certificate. On Windows, Keep Playing can still answer it, without changing any of the game's files:
 
 1. Install [Node.js](https://nodejs.org/) (the LTS version). Download Keep Playing (the green **Code** button at the top of this page, then **Download ZIP**) and unzip it.
