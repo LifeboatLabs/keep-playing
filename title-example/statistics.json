@@ -1,0 +1,4 @@
+[
+  { "StatisticName": "HighScore", "AggregationMethod": "Max" },
+  { "StatisticName": "WeeklyKills", "AggregationMethod": "Sum", "VersionChangeInterval": "Week" }
+]

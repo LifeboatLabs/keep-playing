@@ -1,0 +1,14 @@
+{
+  "name": "keep-playing",
+  "version": "0.1.0",
+  "description": "A free, open-source server that answers PlayFab calls, so games can be tested offline and keep working after their servers shut down.",
+  "license": "MIT",
+  "private": true,
+  "main": "src/app.js",
+  "bin": { "keep-playing": "server.js" },
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/run.js"
+  }
+}

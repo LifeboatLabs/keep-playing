@@ -1,0 +1,10 @@
+{
+  "titleId": "1A2B3",
+  "name": "Example game",
+  "settings": {
+    "allowClientStatistics": true,
+    "allowClientCurrency": false,
+    "checkRequiredFields": true,
+    "acceptAnySecretKey": false
+  }
+}

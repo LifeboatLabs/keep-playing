@@ -1,0 +1,4 @@
+[
+  { "StoreId": "weekend_sale", "CatalogVersion": "Main", "Store": [ { "ItemId": "sword", "VirtualCurrencyPrices": { "GO": 60 } } ],
+    "MarketingData": { "DisplayName": "Weekend sale", "Description": "Cheaper swords until Monday." } }
+]

@@ -1,0 +1,13 @@
+spec/calls.json is generated from Microsoft's PlayFab API descriptions:
+
+  https://github.com/PlayFab/API_Specs
+  Copyright (c) Microsoft Corporation.
+  Licensed under the Apache License, Version 2.0 (see LICENSE-APACHE in this folder).
+
+Changes: tools/gen-spec.js keeps only each call's address, sign-in type,
+request and result type names, entity types and retirement dates, the
+shape of each type (field names, types, whether optional) and the error
+names and numbers. The prose descriptions and examples are left out.
+
+Keep Playing is not made by, or affiliated with, Microsoft.
+PlayFab is a trademark of Microsoft.

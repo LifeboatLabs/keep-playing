@@ -1,0 +1,4 @@
+[
+  { "CurrencyCode": "GO", "DisplayName": "Gold", "InitialDeposit": 500 },
+  { "CurrencyCode": "GE", "DisplayName": "Gems", "InitialDeposit": 0, "RechargeRate": 24, "RechargeMax": 10 }
+]

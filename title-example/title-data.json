@@ -1,0 +1,5 @@
+{
+  "motd": "Welcome back! Double gold this weekend.",
+  "maxLevel": "50",
+  "dropRates": { "common": 0.7, "rare": 0.25, "epic": 0.05 }
+}

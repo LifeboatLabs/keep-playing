@@ -1,0 +1,13 @@
+{
+  "CatalogVersion": "Main",
+  "Catalog": [
+    { "ItemId": "sword", "ItemClass": "Weapon", "DisplayName": "Iron sword", "VirtualCurrencyPrices": { "GO": 100 } },
+    { "ItemId": "potion", "ItemClass": "Consumable", "DisplayName": "Health potion", "VirtualCurrencyPrices": { "GO": 10 },
+      "Consumable": { "UsageCount": 1 }, "IsStackable": true },
+    { "ItemId": "starter_pack", "ItemClass": "Bundle", "DisplayName": "Starter pack", "VirtualCurrencyPrices": { "GO": 150 },
+      "Bundle": { "BundledItems": ["sword", "potion"], "BundledVirtualCurrencies": { "GE": 5 } } },
+    { "ItemId": "crate", "ItemClass": "Container", "DisplayName": "Loot crate", "VirtualCurrencyPrices": { "GO": 40 },
+      "Container": { "KeyItemId": "crate_key", "ItemContents": ["potion"], "VirtualCurrencyContents": { "GO": 50 } } },
+    { "ItemId": "crate_key", "ItemClass": "Key", "DisplayName": "Crate key", "VirtualCurrencyPrices": { "GO": 25 } }
+  ]
+}
