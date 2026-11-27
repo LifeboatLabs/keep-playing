@@ -228,14 +228,14 @@ module.exports = function register(on, app) {
     return answer(201, '', { 'Content-MD5': md5 });
   }
 
-  // When a player is deleted, their files go too.
-  function removePlayer(p) {
+  // When a player or group is deleted, their files go too.
+  function removeAll(record) {
     for (const field of ['files', 'masterFiles']) {
-      const s = p[field];
+      const s = record[field];
       if (!s) continue;
       for (const f of [...Object.values(s.done || {}), ...Object.values(s.pending || {})]) blobs.remove(f.blob);
     }
   }
 
-  app.files = { http, removePlayer, MAX_FILE };
+  app.files = { http, removeAll, MAX_FILE };
 };

@@ -27,6 +27,7 @@ const MODULES = [
   require('./apis/events'),
   require('./apis/objects'),
   require('./apis/files'),
+  require('./apis/groups'),
   require('./apis/sharedgroups'),
   require('./apis/platforms'), // after auth: it uses app.auth
   require('./apis/characters'),

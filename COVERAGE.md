@@ -1,6 +1,6 @@
 # What Keep Playing answers
 
-Keep Playing answers **315 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
+Keep Playing answers **340 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
 
 Every answer is checked against Microsoft's description in the tests. Made by `node tools/coverage.js` from [PlayFab/API_Specs](https://github.com/PlayFab/API_Specs) at commit `06cab88` (2026-11-18).
 
@@ -9,6 +9,7 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | Client | 120 | 174 |
 | Server | 119 | 163 |
 | Admin | 59 | 129 |
+| Group | 25 | 25 |
 | Profile | 5 | 10 |
 | File | 5 | 5 |
 | Event | 2 | 16 |
@@ -18,7 +19,6 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | MultiplayerServer | 0 | 54 |
 | Addon | 0 | 31 |
 | Catalog | 0 | 31 |
-| Group | 0 | 25 |
 | Inventory | 0 | 20 |
 | Match | 0 | 20 |
 | TrueSkill | 0 | 19 |
@@ -33,7 +33,7 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | GameServerIdentity | 0 | 2 |
 | Sweepstakes | 0 | 2 |
 | Locale | 0 | 1 |
-| **All** | **315** | **797** |
+| **All** | **340** | **797** |
 
 ## Client
 
@@ -52,6 +52,10 @@ Not yet: AwardSteamAchievement, DeletePushNotificationTemplate, EvaluateRandomRe
 Working: `AddNews`, `AddPlayerTag`, `AddUserVirtualCurrency`, `AddVirtualCurrencyTypes`, `BanUsers`, `CreatePlayerStatisticDefinition`, `DeletePlayer`, `DeletePlayerCustomProperties`, `DeleteStore`, `GetCatalogItems`, `GetCloudScriptRevision`, `GetCloudScriptVersions`, `GetPlayerCustomProperty`, `GetPlayerProfile`, `GetPlayerSegments`, `GetPlayerStatisticDefinitions`, `GetPlayerStatisticVersions`, `GetPlayerTags`, `GetPublisherData`, `GetStoreItems`, `GetTitleData`, `GetTitleInternalData`, `GetUserAccountInfo`, `GetUserBans`, `GetUserData`, `GetUserInternalData`, `GetUserInventory`, `GetUserPublisherData`, `GetUserPublisherInternalData`, `GetUserPublisherReadOnlyData`, `GetUserReadOnlyData`, `IncrementPlayerStatisticVersion`, `ListPlayerCustomProperties`, `ListVirtualCurrencyTypes`, `RemovePlayerTag`, `RemoveVirtualCurrencyTypes`, `ResetCharacterStatistics`, `RevokeAllBansForUser`, `RevokeInventoryItem`, `RevokeInventoryItems`, `SetCatalogItems`, `SetPublishedRevision`, `SetPublisherData`, `SetStoreItems`, `SetTitleData`, `SetTitleInternalData`, `SubtractUserVirtualCurrency`, `UpdateCatalogItems`, `UpdateCloudScript`, `UpdatePlayerCustomProperties`, `UpdatePlayerStatisticDefinition`, `UpdateStoreItems`, `UpdateUserData`, `UpdateUserInternalData`, `UpdateUserPublisherData`, `UpdateUserPublisherInternalData`, `UpdateUserPublisherReadOnlyData`, `UpdateUserReadOnlyData`, `UpdateUserTitleDisplayName`
 
 Not yet: AbortTaskInstance, AddLocalizedNews, CheckLimitedEditionItemAvailability, CreateActionsOnPlayersInSegmentTask, CreateCloudScriptAzureFunctionsTask, CreateCloudScriptTask, CreateInsightsScheduledScalingTask, CreateIPBan, CreateOpenIdConnection, CreatePlayerSharedSecret, CreateSegment, DeleteContent, DeleteEventSink, DeleteMasterPlayerAccount, DeleteMasterPlayerEventData, DeleteMembershipSubscription, DeleteOpenIdConnection, DeletePlayerSharedSecret, DeleteSegment, DeleteTask, DeleteTitle, DeleteTitleDataOverride, ExportMasterPlayerData, ExportPlayersInSegment, GetActionsOnPlayersInSegmentTaskInstance, GetAllSegments, GetCloudScriptAzureFunctionsTaskInstance, GetCloudScriptTaskInstance, GetContentList, GetContentUploadUrl, GetDataReport, GetEventSinks, GetIPBansForIP, GetIPBansForTitle, GetPlayedTitleList, GetPlayerIdFromAuthToken, GetPlayerSharedSecrets, GetPolicy, GetRandomResultTables, GetSegmentExport, GetSegmentPlayerCount, GetSegments, GetStoreMetrics, GetTaskInstances, GetTasks, GrantItemsToUsers, IncrementLimitedEditionItemAvailability, ListOpenIdConnection, RefundPurchase, ResetPassword, ResetUserStatistics, ResolvePurchaseDispute, RevokeBans, RevokeIPBan, RunTask, SendAccountRecoveryEmail, SetEventSink, SetMembershipOverride, SetPlayerSecret, SetTitleDataAndOverrides, SetupPushNotification, UpdateBans, UpdateIPBan, UpdateOpenIdConnection, UpdatePlayerSharedSecret, UpdatePolicy, UpdateRandomResultTables, UpdateSegment, UpdateTask, ValidateApiPolicy
+
+## Group
+
+Working: `AcceptGroupApplication`, `AcceptGroupInvitation`, `AddMembers`, `ApplyToGroup`, `BlockEntity`, `ChangeMemberRole`, `CreateGroup`, `CreateRole`, `DeleteGroup`, `DeleteRole`, `GetGroup`, `InviteToGroup`, `IsMember`, `ListGroupApplications`, `ListGroupBlocks`, `ListGroupInvitations`, `ListGroupMembers`, `ListMembership`, `ListMembershipOpportunities`, `RemoveGroupApplication`, `RemoveGroupInvitation`, `RemoveMembers`, `UnblockEntity`, `UpdateGroup`, `UpdateRole`
 
 ## Profile
 
@@ -94,10 +98,6 @@ Not yet: ConfigurePSNEventStreams, CreateOrUpdateApple, CreateOrUpdateFacebook, 
 ## Catalog
 
 Not yet: CreateDraftItem, CreateUploadUrls, CreateView, DeleteEntityItemReviews, DeleteItem, DeleteView, GetCatalogConfig, GetDraftItem, GetDraftItems, GetEntityDraftItems, GetEntityItemReview, GetItem, GetItemContainers, GetItemModerationState, GetItemPublishStatus, GetItemReviews, GetItemReviewSummary, GetItems, GetView, GetViews, PublishDraftItem, ReportItem, ReportItemReview, ReviewItem, SearchItems, SetItemModerationState, SubmitItemReviewVote, TakedownItemReviews, UpdateCatalogConfig, UpdateDraftItem, UpdateView
-
-## Group
-
-Not yet: AcceptGroupApplication, AcceptGroupInvitation, AddMembers, ApplyToGroup, BlockEntity, ChangeMemberRole, CreateGroup, CreateRole, DeleteGroup, DeleteRole, GetGroup, InviteToGroup, IsMember, ListGroupApplications, ListGroupBlocks, ListGroupInvitations, ListGroupMembers, ListMembership, ListMembershipOpportunities, RemoveGroupApplication, RemoveGroupInvitation, RemoveMembers, UnblockEntity, UpdateGroup, UpdateRole
 
 ## Inventory
 

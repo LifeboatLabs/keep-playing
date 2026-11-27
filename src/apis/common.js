@@ -25,8 +25,9 @@ function targetPlayer(app, body, ctx) {
 
 // Finds where an entity's things of one kind ('objects' or 'files') live, and
 // checks the caller may use them. Anyone may look; only the player themselves
-// or the game's own server may change a player's, and only the server the
-// title's. save() counts a new profile version; keep() saves without one.
+// or the game's own server may change a player's, only the server the title's,
+// and only a group's admins (or the server) a group's. save() counts a new
+// profile version; keep() saves without one.
 function entityHolder(app, entityKey, ctx, write, kind) {
   const key = entityKey || ctx.entity;
   if (!key || typeof key.Id !== 'string') throw fail('InvalidParams', 'Invalid input parameters', 400, { Entity: ['The Entity field is required.'] });
@@ -64,6 +65,22 @@ function entityHolder(app, entityKey, ctx, write, kind) {
         return t.objectsVersion;
       },
       keep: () => app.saveTitle(t),
+      type,
+    };
+  }
+  if (type === 'group') {
+    const g = app.groups.find(key, ctx);
+    if (write && !app.groups.canManage(g, ctx)) throw fail('NotAuthorized', `Only the group's admins can change its ${kind}.`, 403);
+    return {
+      entity: { Id: g.id, Type: 'group', TypeString: 'group' },
+      get: () => (g[kind] = g[kind] || {}),
+      version: () => g.profileVersion || 0,
+      save: () => {
+        g.profileVersion = (g.profileVersion || 0) + 1;
+        app.groups.save(g);
+        return g.profileVersion;
+      },
+      keep: () => app.groups.save(g),
       type,
     };
   }

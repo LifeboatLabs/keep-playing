@@ -1001,6 +1001,119 @@ test('entity files: upload, finalise, download, and only the owner changes them'
   await t.stop();
 });
 
+test('groups: roles, applications, invitations, blocks and members', async () => {
+  const t = await start();
+  const [ana, ben, cat, dan, eve] = [await t.player('ana'), await t.player('ben'), await t.player('cat'), await t.player('dan'), await t.player('eve')];
+  const tt = await t.ok('/Authentication/GetEntityToken', {}, t.secret);
+  const title = { 'X-EntityToken': tt.EntityToken };
+  const isMember = async (who, roleId) => (await t.ok('/Group/IsMember', { Group: G, Entity: who.entityKey, RoleId: roleId }, ana.entity)).IsMember;
+
+  const made = await t.ok('/Group/CreateGroup', { GroupName: 'Night Owls' }, ana.entity);
+  const G = made.Group;
+  assert.deepEqual([made.AdminRoleId, made.MemberRoleId, made.Roles], ['admins', 'members', { admins: 'Administrators', members: 'Members' }]);
+  await t.err('/Group/CreateGroup', { GroupName: 'night owls' }, ben.entity, 'GroupNameNotAvailable');
+  assert.equal((await t.ok('/Group/GetGroup', { GroupName: 'Night Owls' }, ben.entity)).Group.Id, G.Id);
+
+  // Applying, and an admin accepting. Applying twice gives the same application.
+  const applied = await t.ok('/Group/ApplyToGroup', { Group: G }, ben.entity);
+  assert.deepEqual([applied.Entity.Key.Id, applied.Entity.Lineage.master_player_account.Id], [ben.entityKey.Id, ben.id]);
+  assert.equal((await t.ok('/Group/ApplyToGroup', { Group: G }, ben.entity)).Expires, applied.Expires);
+  await t.err('/Group/AcceptGroupApplication', { Group: G, Entity: ben.entityKey }, cat.entity, 'NotAuthorized');
+  assert.equal((await t.ok('/Group/ListGroupApplications', { Group: G }, ana.entity)).Applications.length, 1);
+  await t.ok('/Group/AcceptGroupApplication', { Group: G, Entity: ben.entityKey }, ana.entity);
+  assert.equal(await isMember(ben), true);
+  await t.err('/Group/ApplyToGroup', { Group: G }, ben.entity, 'EntityIsAlreadyMember');
+
+  // Roles, and an invitation into one.
+  assert.equal((await t.ok('/Group/CreateRole', { Group: G, RoleId: 'officers', RoleName: 'Officers' }, ana.entity)).RoleId, 'officers');
+  await t.err('/Group/CreateRole', { Group: G, RoleId: 'officers', RoleName: 'Other' }, ana.entity, 'DuplicateRoleId');
+  await t.err('/Group/CreateRole', { Group: G, RoleId: 'x', RoleName: 'OFFICERS' }, ana.entity, 'RoleNameNotAvailable');
+  await t.err('/Group/CreateRole', { Group: G, RoleId: 'bad id!', RoleName: 'Bad' }, ana.entity, 'InvalidParams');
+  await t.err('/Group/CreateRole', { Group: G, RoleId: 'nope', RoleName: 'Nope' }, ben.entity, 'NotAuthorized');
+  const inv = await t.ok('/Group/InviteToGroup', { Group: G, Entity: cat.entityKey, RoleId: 'officers' }, ana.entity);
+  assert.deepEqual([inv.InvitedByEntity.Key.Id, inv.InvitedEntity.Key.Id, inv.RoleId], [ana.entityKey.Id, cat.entityKey.Id, 'officers']);
+  assert.equal((await t.ok('/Group/ListMembershipOpportunities', {}, cat.entity)).Invitations.length, 1);
+  assert.deepEqual((await t.ok('/Group/ListMembershipOpportunities', { Entity: cat.entityKey }, ben.entity)).Invitations, []);
+  assert.equal((await t.ok('/Group/ListGroupInvitations', { Group: G }, ana.entity)).Invitations.length, 1);
+  await t.err('/Group/AcceptGroupInvitation', { Group: G, Entity: cat.entityKey }, ben.entity, 'NotAuthorized');
+  await t.ok('/Group/AcceptGroupInvitation', { Group: G }, cat.entity);
+  assert.equal(await isMember(cat, 'officers'), true);
+
+  // Applying while invited joins instead, and says so.
+  await t.ok('/Group/InviteToGroup', { Group: G, Entity: dan.entityKey }, ana.entity);
+  await t.err('/Group/ApplyToGroup', { Group: G }, dan.entity, 'OutstandingInvitationAcceptedInstead');
+  assert.equal(await isMember(dan), true);
+
+  // Members and their roles.
+  const list = await t.ok('/Group/ListGroupMembers', { Group: G }, eve.entity);
+  assert.deepEqual(list.Members.map((r) => [r.RoleId, r.Members.length]), [['admins', 1], ['members', 2], ['officers', 1]]);
+  await t.ok('/Group/ChangeMemberRole', { Group: G, Members: [ben.entityKey], OriginRoleId: 'members', DestinationRoleId: 'officers' }, ana.entity);
+  await t.err('/Group/ChangeMemberRole', { Group: G, Members: [ben.entityKey], OriginRoleId: 'members' }, ana.entity, 'EntityIsNotAMember');
+  await t.ok('/Group/AddMembers', { Group: G, Members: [ben.entityKey], RoleId: 'admins' }, ana.entity);
+  const ms = await t.ok('/Group/ListMembership', { Entity: ben.entityKey }, cat.entity);
+  assert.deepEqual(ms.Groups[0].Roles.map((r) => r.RoleId).sort(), ['admins', 'officers']);
+
+  // Only the game's server adds someone who isn't in the group; anyone can leave.
+  await t.err('/Group/AddMembers', { Group: G, Members: [eve.entityKey] }, ana.entity, 'NotAuthorized');
+  await t.ok('/Group/AddMembers', { Group: G, Members: [eve.entityKey] }, title);
+  await t.ok('/Group/RemoveMembers', { Group: G, Members: [eve.entityKey] }, eve.entity);
+  await t.err('/Group/RemoveMembers', { Group: G, Members: [ana.entityKey] }, dan.entity, 'NotAuthorized');
+  await t.ok('/Group/RemoveMembers', { Group: G, Members: [dan.entityKey] }, ana.entity);
+  assert.equal(await isMember(dan), false);
+
+  // Blocks.
+  await t.ok('/Group/BlockEntity', { Group: G, Entity: dan.entityKey }, ana.entity);
+  await t.err('/Group/ApplyToGroup', { Group: G }, dan.entity, 'EntityBlockedByGroup');
+  await t.err('/Group/InviteToGroup', { Group: G, Entity: dan.entityKey }, ana.entity, 'EntityBlockedByGroup');
+  assert.equal((await t.ok('/Group/ListGroupBlocks', { Group: G }, ana.entity)).BlockedEntities.length, 1);
+  await t.ok('/Group/UnblockEntity', { Group: G, Entity: dan.entityKey }, ana.entity);
+
+  // Withdrawing an application, taking back an invitation, and being invited after applying.
+  await t.ok('/Group/ApplyToGroup', { Group: G }, dan.entity);
+  await t.ok('/Group/RemoveGroupApplication', { Group: G, Entity: dan.entityKey }, dan.entity);
+  await t.err('/Group/RemoveGroupApplication', { Group: G, Entity: dan.entityKey }, ana.entity, 'GroupApplicationNotFound');
+  await t.ok('/Group/InviteToGroup', { Group: G, Entity: dan.entityKey }, ana.entity);
+  await t.ok('/Group/RemoveGroupInvitation', { Group: G, Entity: dan.entityKey }, ana.entity);
+  await t.err('/Group/AcceptGroupInvitation', { Group: G }, dan.entity, 'GroupInvitationNotFound');
+  await t.ok('/Group/ApplyToGroup', { Group: G }, dan.entity);
+  await t.err('/Group/InviteToGroup', { Group: G, Entity: dan.entityKey }, ana.entity, 'OutstandingApplicationAcceptedInstead');
+  assert.equal(await isMember(dan), true);
+
+  // Changing the group and its roles. An out-of-date version changes nothing.
+  const before = await t.ok('/Group/GetGroup', { Group: G }, ana.entity);
+  const renamed = await t.ok('/Group/UpdateGroup', { Group: G, GroupName: 'Night Hawks', ExpectedProfileVersion: before.ProfileVersion }, ana.entity);
+  assert.deepEqual([renamed.SetResult, renamed.ProfileVersion], ['Updated', before.ProfileVersion + 1]);
+  assert.equal((await t.ok('/Group/UpdateGroup', { Group: G, GroupName: 'X', ExpectedProfileVersion: before.ProfileVersion }, ana.entity)).SetResult, 'None');
+  await t.err('/Group/UpdateGroup', { Group: G, AdminRoleId: 'officers' }, ana.entity, 'NotAuthorized');
+  assert.equal((await t.ok('/Group/UpdateRole', { Group: G, RoleId: 'officers', RoleName: 'Captains' }, ana.entity)).SetResult, 'Updated');
+  await t.err('/Group/DeleteRole', { Group: G, RoleId: 'admins' }, ana.entity, 'RoleIsGroupAdmin');
+  await t.err('/Group/DeleteRole', { Group: G, RoleId: 'members' }, ana.entity, 'RoleIsGroupDefaultMember');
+  await t.err('/Group/DeleteRole', { Group: G, RoleId: 'nope' }, ana.entity, 'RoleDoesNotExist');
+  await t.ok('/Group/DeleteRole', { Group: G, RoleId: 'officers' }, ana.entity);
+  assert.deepEqual([await isMember(cat), await isMember(ben)], [false, true]); // cat was only an officer
+
+  // A group's objects: anyone can read them; only its admins can change them.
+  await t.ok('/Object/SetObjects', { Entity: G, Objects: [{ ObjectName: 'motto', DataObject: { text: 'Hoot' } }] }, ana.entity);
+  await t.err('/Object/SetObjects', { Entity: G, Objects: [{ ObjectName: 'motto', DataObject: 'x' }] }, dan.entity, 'NotAuthorized');
+  assert.equal((await t.ok('/Object/GetObjects', { Entity: G }, cat.entity)).Objects.motto.DataObject.text, 'Hoot');
+
+  // A deleted player leaves their groups; only admins delete a group.
+  await t.ok('/Server/DeletePlayer', { PlayFabId: ben.id }, t.secret);
+  const after = await t.ok('/Group/ListGroupMembers', { Group: G }, ana.entity);
+  assert.deepEqual(after.Members.map((r) => [r.RoleId, r.Members.map((m) => m.Key.Id)]), [['admins', [ana.entityKey.Id]], ['members', [dan.entityKey.Id]]]);
+  await t.err('/Group/DeleteGroup', { Group: G }, dan.entity, 'NotAuthorized');
+  await t.ok('/Group/DeleteGroup', { Group: G }, ana.entity);
+  await t.err('/Group/GetGroup', { Group: G }, ana.entity, 'ProfileDoesNotExist');
+
+  // Invitations run out after a week.
+  const later = await t.ok('/Group/CreateGroup', { GroupName: 'Later' }, title);
+  await t.ok('/Group/InviteToGroup', { Group: later.Group, Entity: dan.entityKey }, title);
+  t.clock.now = new Date(t.clock.now.getTime() + 8 * 24 * 60 * 60 * 1000);
+  const fresh = { 'X-EntityToken': (await t.ok('/Authentication/GetEntityToken', {}, t.secret)).EntityToken };
+  assert.deepEqual((await t.ok('/Group/ListGroupInvitations', { Group: later.Group }, fresh)).Invitations, []);
+  await t.stop();
+});
+
 test('shared groups: members share data, others see only what\'s public', async () => {
   const t = await start();
   const a = await t.player('sg-a');
@@ -1395,6 +1508,7 @@ test('players are saved to disk and survive a restart', async () => {
     const p = await t.player('ida');
     await t.ok('/Client/UpdateUserData', { Data: { saved: 'yes' } }, p.auth);
     await t.ok('/Server/SetTitleData', { Key: 'motd', Value: 'kept' }, t.secret);
+    await t.ok('/Group/CreateGroup', { GroupName: 'Kept Clan' }, p.entity);
     const up = await t.ok('/File/InitiateFileUploads', { Entity: p.entityKey, FileNames: ['ida.sav'] }, p.entity);
     await fetch(up.UploadDetails[0].UploadUrl, { method: 'PUT', body: 'level 3' });
     await t.ok('/File/FinalizeFileUploads', { Entity: p.entityKey, FileNames: ['ida.sav'], ProfileVersion: up.ProfileVersion }, p.entity);
@@ -1412,6 +1526,8 @@ test('players are saved to disk and survive a restart', async () => {
     // An old session ticket still works after a restart (same signing key).
     await t.ok('/Client/GetAccountInfo', {}, p.auth);
     const files = await t.ok('/File/GetFiles', { Entity: p.entityKey }, p.entity);
+    const groups = await t.ok('/Group/ListMembership', {}, p.entity);
+    assert.deepEqual(groups.Groups.map((g) => g.GroupName), ['Kept Clan']);
     assert.equal(await (await fetch(files.Metadata['ida.sav'].DownloadUrl)).text(), 'level 3');
     await t.stop();
 
