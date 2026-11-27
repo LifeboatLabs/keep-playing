@@ -1,0 +1,12 @@
+[
+  {
+    "Name": "quickplay",
+    "MinMatchSize": 2,
+    "MaxMatchSize": 4,
+    "ServerAllocationEnabled": false,
+    "StringEqualityRules": [
+      { "Name": "Same map", "Attribute": { "Path": "map", "Source": "User" }, "AttributeNotSpecifiedBehavior": "MatchAny", "Weight": 1 }
+    ],
+    "StatisticsVisibilityToPlayers": { "ShowNumberOfPlayersMatching": true, "ShowTimeToMatch": true }
+  }
+]

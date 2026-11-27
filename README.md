@@ -13,7 +13,7 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 
 This is an early version (0.1).
 
-- **It answers 340 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
+- **It answers 353 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
 - **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check almost 400 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
 - **It hasn't been tried with a real game yet.** If you make games or mods with PlayFab, please try it and [tell us what broke](https://github.com/LifeboatLabs/keep-playing/issues).
 
@@ -96,6 +96,7 @@ Put the game's settings in a folder and start the server with `--title that-fold
 | `statistics.json` | Statistics: how values combine (Last, Min, Max, Sum) and when they reset |
 | `cloudscript.js` or `cloudscript/*.js` | The game's classic CloudScript |
 | `news.json` | Title news |
+| `matchmaking-queues.json` | Matchmaking queues and their rules, in the form PlayFab's SetMatchmakingQueue takes |
 
 The folder is read every time the server starts, and what's in it is put in place. Changes made while the server was running are kept: title data set by the game's server, statistic versions, and earlier CloudScript revisions.
 
@@ -118,6 +119,7 @@ Switches in `title.json` → `settings`:
 - **Friends**: friends, friend tags and friend leaderboards.
 - **Shared groups**: small groups of players who share data, with public and private keys.
 - **Groups**: clans and guilds, with roles, invitations, applications to join, and blocked players. A group can have its own objects and files too.
+- **Matchmaking**: queues, tickets (with friends who join the same ticket), teams, and the rules that decide who plays together: same mode, a skill gap that widens the longer people wait, shared choices, totals, and a region everyone can reach. Games that ask how their ticket is doing get their match. Keep Playing can't start game servers, so matches come without server details.
 - **Statistics**: player statistics with Last, Min, Max and Sum, and hourly, daily, weekly and monthly resets. Also classic leaderboards, including the leaderboard around a player.
 - **Economy**: the classic economy, with catalogs, stores, bundles, containers and keys, consumable and stackable items, and virtual currency that recharges.
 - **Characters**: the classic characters a player can have, each with its own data, statistics, leaderboards, items and currency. Buying an item straight into a character's inventory doesn't work yet.
@@ -130,7 +132,7 @@ Switches in `title.json` → `settings`:
 
 These are the big gaps, roughly in the order we'll work on them:
 
-- matchmaking and lobbies;
+- lobbies, and matchmaking for games that wait to be told about a match instead of asking;
 - the newer economy (Catalog and Inventory), and the newer leaderboards and statistics;
 - CloudScript that runs on Azure Functions;
 - multiplayer servers and Party;

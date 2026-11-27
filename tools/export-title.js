@@ -19,10 +19,14 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-async function call(server, url, body, secretKey) {
+async function call(server, url, body, secretKey, entityToken) {
   const res = await fetch(server + url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-SecretKey': secretKey, 'X-PlayFabSDK': 'KeepPlayingExport-1.0' },
+    headers: {
+      'Content-Type': 'application/json',
+      'X-PlayFabSDK': 'KeepPlayingExport-1.0',
+      ...(entityToken ? { 'X-EntityToken': entityToken } : { 'X-SecretKey': secretKey }),
+    },
     body: JSON.stringify(body),
   });
   let json;
@@ -132,6 +136,16 @@ async function exportTitle({ titleId, secretKey, out, server, catalogs = [], sto
     const d = await get('/Server/GetTitleNews', { Count: 100 });
     write('news.json', d.News || []);
     summary.files.push(`news.json (${(d.News || []).length} items)`);
+  });
+
+  // Matchmaking calls need the title's entity token, which the secret key gets.
+  await optional('matchmaking queues', async () => {
+    const token = (await get('/Authentication/GetEntityToken', {})).EntityToken;
+    const queues = (await call(base, '/Match/ListMatchmakingQueues', {}, secretKey, token)).MatchMakingQueues || [];
+    if (queues.length) {
+      write('matchmaking-queues.json', queues);
+      summary.files.push(`matchmaking-queues.json (${queues.length} queues)`);
+    }
   });
 
   write('title.json', {

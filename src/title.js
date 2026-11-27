@@ -38,6 +38,7 @@ function emptyTitle() {
     statistics: {},
     cloudScript: { revisions: [], live: null },
     news: [],
+    matchmakingQueues: {},
   };
 }
 
@@ -165,6 +166,13 @@ function readFolder(dir) {
   }
 
   if (has('news.json')) t.news = readJson(file('news.json'));
+  // Matchmaking queues: a list of queue configurations, as PlayFab's SetMatchmakingQueue takes them.
+  if (has('matchmaking-queues.json')) {
+    for (const q of readJson(file('matchmaking-queues.json'))) {
+      if (!q || typeof q.Name !== 'string') throw new Error('Each queue in matchmaking-queues.json needs a Name.');
+      t.matchmakingQueues[q.Name] = q;
+    }
+  }
   return t;
 }
 
@@ -228,6 +236,7 @@ function load(store, dir) {
   const news = new Map((current.news || []).map((n) => [n.NewsId, n]));
   for (const n of folder.news) news.set(n.NewsId, n);
   next.news = [...news.values()];
+  next.matchmakingQueues = { ...current.matchmakingQueues, ...folder.matchmakingQueues };
 
   save(store, next);
   return next;

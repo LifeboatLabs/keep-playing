@@ -1003,6 +1003,96 @@ test('entity files: upload, finalise, download, and only the owner changes them'
   await t.stop();
 });
 
+test('matchmaking: queues, rules, expansion, invitations, teams and regions', async () => {
+  const t = await start();
+  const [a, b, c, d, e] = [await t.player('mm-a'), await t.player('mm-b'), await t.player('mm-c'), await t.player('mm-d'), await t.player('mm-e')];
+  const title = { 'X-EntityToken': (await t.ok('/Authentication/GetEntityToken', {}, t.secret)).EntityToken };
+  const later = (secs) => { t.clock.now = new Date(t.clock.now.getTime() + secs * 1000); };
+  const ticket = (who, q, id, extra = {}) => t.ok('/Match/GetMatchmakingTicket', { QueueName: q, TicketId: id, EscapeObject: false, ...extra }, who.entity);
+  const make = (who, q, attrs, extra = {}) => t.ok('/Match/CreateMatchmakingTicket', { QueueName: q, GiveUpAfterSeconds: 120, Creator: { Entity: who.entityKey, Attributes: { DataObject: attrs } }, ...extra }, who.entity);
+
+  // The example title's queue comes from its folder; only the game's server manages queues.
+  assert.equal((await t.ok('/Match/GetMatchmakingQueue', { QueueName: 'quickplay' }, title)).MatchmakingQueue.MaxMatchSize, 4);
+  const duel = {
+    Name: 'duel', MinMatchSize: 2, MaxMatchSize: 2, ServerAllocationEnabled: false,
+    StringEqualityRules: [{ Name: 'mode', Attribute: { Path: 'mode', Source: 'User' }, AttributeNotSpecifiedBehavior: 'MatchAny', Weight: 1 }],
+    DifferenceRules: [{ Name: 'skill', Attribute: { Path: '$.skill', Source: 'User' }, AttributeNotSpecifiedBehavior: 'UseDefault', DefaultAttributeValue: 1000,
+      Difference: 100, MergeFunction: 'Average', Weight: 1, LinearExpansion: { Delta: 100, SecondsBetweenExpansions: 10 } }],
+    StatisticsVisibilityToPlayers: { ShowNumberOfPlayersMatching: true, ShowTimeToMatch: false },
+  };
+  await t.err('/Match/SetMatchmakingQueue', { MatchmakingQueue: duel }, a.entity, 'MatchmakingUnauthorized');
+  await t.err('/Match/SetMatchmakingQueue', { MatchmakingQueue: { ...duel, MinMatchSize: 3 } }, title, 'MatchmakingQueueConfigInvalid');
+  await t.ok('/Match/SetMatchmakingQueue', { MatchmakingQueue: duel }, title);
+  assert.deepEqual((await t.ok('/Match/ListMatchmakingQueues', {}, title)).MatchMakingQueues.map((q) => q.Name).sort(), ['duel', 'quickplay']);
+  await t.err('/Match/CreateMatchmakingTicket', { QueueName: 'nope', GiveUpAfterSeconds: 60, Creator: { Entity: a.entityKey } }, a.entity, 'MatchmakingQueueNotFound');
+  await t.err('/Match/CreateMatchmakingTicket', { QueueName: 'duel', GiveUpAfterSeconds: 60, Creator: { Entity: b.entityKey } }, a.entity, 'MatchmakingUnauthorized');
+
+  // Different modes never match; a big skill gap matches once the rule has widened.
+  const ta = (await make(a, 'duel', { mode: 'ranked', skill: 1000 })).TicketId;
+  const tb = (await make(b, 'duel', { mode: 'casual', skill: 1000 })).TicketId;
+  const tc = (await make(c, 'duel', { mode: 'ranked', skill: 1450 })).TicketId;
+  assert.equal((await ticket(a, 'duel', ta)).Status, 'WaitingForMatch');
+  assert.equal((await t.ok('/Match/GetQueueStatistics', { QueueName: 'duel' }, a.entity)).NumberOfPlayersMatching, 3);
+  await t.err('/Match/GetMatchmakingTicket', { QueueName: 'duel', TicketId: ta, EscapeObject: false }, b.entity, 'MatchmakingUnauthorized');
+  later(40); // 100 + 4 x 100 = 500 apart is now allowed
+  const matched = await ticket(a, 'duel', ta, { EscapeObject: true });
+  assert.equal(matched.Status, 'Matched');
+  assert.equal(matched.Members[0].Attributes.EscapedDataObject, '{"mode":"ranked","skill":1000}');
+  const match = await t.ok('/Match/GetMatch', { QueueName: 'duel', MatchId: matched.MatchId, EscapeObject: false, ReturnMemberAttributes: true }, c.entity);
+  assert.deepEqual(match.Members.map((m) => [m.Entity.Id, m.Attributes.DataObject.skill]), [[a.entityKey.Id, 1000], [c.entityKey.Id, 1450]]);
+  await t.err('/Match/GetMatch', { QueueName: 'duel', MatchId: matched.MatchId, EscapeObject: false, ReturnMemberAttributes: false }, b.entity, 'MatchmakingUnauthorized');
+  await t.err('/Match/CancelMatchmakingTicket', { QueueName: 'duel', TicketId: ta }, a.entity, 'MatchmakingTicketAlreadyCompleted');
+  const stats = await t.ok('/Match/GetQueueStatistics', { QueueName: 'duel' }, title);
+  assert.deepEqual([stats.NumberOfPlayersMatching, stats.TimeToMatchStatisticsInSeconds.Average], [1, 40]);
+
+  // One waiting ticket per player per queue; cancelling them all; giving up after a while.
+  await t.err('/Match/CreateMatchmakingTicket', { QueueName: 'duel', GiveUpAfterSeconds: 60, Creator: { Entity: b.entityKey } }, b.entity, 'MatchmakingTicketMembershipLimitExceeded');
+  assert.deepEqual((await t.ok('/Match/ListMatchmakingTicketsForPlayer', { QueueName: 'duel' }, b.entity)).TicketIds, [tb]);
+  await t.ok('/Match/CancelAllMatchmakingTicketsForPlayer', { QueueName: 'duel' }, b.entity);
+  const gone = await ticket(b, 'duel', tb);
+  assert.deepEqual([gone.Status, gone.CancellationReason], ['Canceled', 'Requested']);
+  const td = (await make(d, 'duel', { mode: 'solo' }, { GiveUpAfterSeconds: 30 })).TicketId;
+  later(31);
+  const timedOut = await ticket(d, 'duel', td);
+  assert.deepEqual([timedOut.Status, timedOut.CancellationReasonString], ['Canceled', 'Timeout']);
+  const te = (await make(e, 'quickplay', { map: 'docks' })).TicketId;
+  await t.ok('/Match/CancelMatchmakingTicket', { QueueName: 'quickplay', TicketId: te }, e.entity);
+  await t.ok('/Match/CancelMatchmakingTicket', { QueueName: 'quickplay', TicketId: te }, e.entity); // again: nothing happens
+  assert.equal((await ticket(e, 'quickplay', te)).Status, 'Canceled');
+
+  // Teams, an invited friend, and a region everyone can reach.
+  const squads = {
+    Name: 'squads', MinMatchSize: 4, MaxMatchSize: 4, MaxTicketSize: 2, ServerAllocationEnabled: false,
+    Teams: [{ Name: 'red', MinTeamSize: 2, MaxTeamSize: 2 }, { Name: 'blue', MinTeamSize: 2, MaxTeamSize: 2 }],
+    TeamSizeBalanceRule: { Name: 'even', Difference: 0 },
+    RegionSelectionRule: { Name: 'region', Path: 'latencies', MaxLatency: 100, Weight: 1 },
+  };
+  await t.ok('/Match/SetMatchmakingQueue', { MatchmakingQueue: squads }, title);
+  const lat = (east, west) => ({ latencies: [{ region: 'EastUs', latency: east }, { region: 'WestEurope', latency: west }] });
+  const party = (await make(a, 'squads', lat(40, 90), { MembersToMatchWith: [b.entityKey] })).TicketId;
+  assert.equal((await ticket(a, 'squads', party)).Status, 'WaitingForPlayers');
+  await t.err('/Match/JoinMatchmakingTicket', { QueueName: 'squads', TicketId: party, Member: { Entity: e.entityKey } }, e.entity, 'MatchmakingUnauthorized');
+  await t.ok('/Match/JoinMatchmakingTicket', { QueueName: 'squads', TicketId: party, Member: { Entity: b.entityKey, Attributes: { DataObject: lat(60, 30) } } }, b.entity);
+  await t.err('/Match/JoinMatchmakingTicket', { QueueName: 'squads', TicketId: party, Member: { Entity: b.entityKey } }, b.entity, 'MatchmakingAlreadyJoinedTicket');
+  await t.err('/Match/CreateServerMatchmakingTicket', { QueueName: 'squads', GiveUpAfterSeconds: 60,
+    Members: [c, d, e].map((p) => ({ Entity: p.entityKey })) }, title, 'MatchmakingNumberOfPlayersInTicketTooLarge');
+  await t.ok('/Match/CreateServerMatchmakingTicket', { QueueName: 'squads', GiveUpAfterSeconds: 60,
+    Members: [{ Entity: c.entityKey, Attributes: { DataObject: lat(50, 80) } }, { Entity: d.entityKey, Attributes: { DataObject: lat(200, 50) } }] }, title);
+  const sq = await ticket(b, 'squads', party);
+  assert.equal(sq.Status, 'Matched');
+  const teams = await t.ok('/Match/GetMatch', { QueueName: 'squads', MatchId: sq.MatchId, EscapeObject: false, ReturnMemberAttributes: false }, title);
+  const team = Object.fromEntries(teams.Members.map((m) => [m.Entity.Id, m.TeamId]));
+  assert.equal(team[a.entityKey.Id], team[b.entityKey.Id]);
+  assert.equal(team[c.entityKey.Id], team[d.entityKey.Id]);
+  assert.notEqual(team[a.entityKey.Id], team[c.entityKey.Id]);
+  assert.deepEqual(teams.RegionPreferences, ['WestEurope']); // d is too far from EastUs
+
+  // Removing a queue.
+  await t.ok('/Match/RemoveMatchmakingQueue', { QueueName: 'duel' }, title);
+  await t.err('/Match/GetMatchmakingQueue', { QueueName: 'duel' }, title, 'MatchmakingQueueNotFound');
+  await t.stop();
+});
+
 test("https: Keep Playing's own certificate works, and only for this computer", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-tls-'));
   const now = new Date('2026-11-27T10:00:00Z');
@@ -1663,6 +1753,11 @@ test('a title can be saved to a folder and brought back unchanged', async () => 
     await same('/Admin/ListVirtualCurrencyTypes');
     await same('/Admin/GetPlayerStatisticDefinitions');
     await same('/Server/GetTitleNews', { Count: 100 });
+    const tokenOf = async (t) => ({ 'X-EntityToken': (await t.ok('/Authentication/GetEntityToken', {}, t.secret)).EntityToken });
+    assert.deepEqual(
+      await copy.ok('/Match/ListMatchmakingQueues', {}, await tokenOf(copy)),
+      await source.ok('/Match/ListMatchmakingQueues', {}, await tokenOf(source)),
+    );
     const p = await copy.player('saved');
     const hello = await copy.ok('/Client/ExecuteCloudScript', { FunctionName: 'helloWorld' }, p.auth);
     assert.equal(hello.FunctionResult.messageValue, `Hello ${p.id}!`);

@@ -45,7 +45,9 @@ Steam tickets and other platform tokens (Apple, Nintendo, Battle.net, OpenID...)
 the player ID is read from them (README says so). Google, Facebook, Xbox, PSN and Twitch sign-ins can't be
 supported that way. CloudScript runs in its own vm context and talks to the server through text only, but
 it isn't a sandbox.
-No matchmaking, lobbies, Economy v2, character entities or Azure Functions yet. Groups use PlayFab's default
+No lobbies, PubSub notifications, backfill tickets, Economy v2, character entities or Azure Functions yet.
+Matchmaking (src/apis/matchmaking.js) matches greedily, oldest ticket first, when tickets are made, joined or polled;
+weights, team difference/ticket-size-similarity rules and PlayerEntity attributes aren't used. Groups use PlayFab's default
 role rules (admins do everything, anyone may look); a title's own group template isn't read. Characters can't buy items
 (PurchaseItem with a CharacterId says NotImplemented).
 

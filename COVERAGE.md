@@ -1,6 +1,6 @@
 # What Keep Playing answers
 
-Keep Playing answers **340 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
+Keep Playing answers **353 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
 
 Every answer is checked against Microsoft's description in the tests. Made by `node tools/coverage.js` from [PlayFab/API_Specs](https://github.com/PlayFab/API_Specs) at commit `06cab88` (2026-11-18).
 
@@ -10,6 +10,7 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | Server | 119 | 163 |
 | Admin | 59 | 129 |
 | Group | 25 | 25 |
+| Match | 13 | 20 |
 | Profile | 5 | 10 |
 | File | 5 | 5 |
 | Event | 2 | 16 |
@@ -20,7 +21,6 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | Addon | 0 | 31 |
 | Catalog | 0 | 31 |
 | Inventory | 0 | 20 |
-| Match | 0 | 20 |
 | TrueSkill | 0 | 19 |
 | Lobby | 0 | 16 |
 | Experimentation | 0 | 13 |
@@ -33,7 +33,7 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | GameServerIdentity | 0 | 2 |
 | Sweepstakes | 0 | 2 |
 | Locale | 0 | 1 |
-| **All** | **340** | **797** |
+| **All** | **353** | **797** |
 
 ## Client
 
@@ -56,6 +56,12 @@ Not yet: AbortTaskInstance, AddLocalizedNews, CheckLimitedEditionItemAvailabilit
 ## Group
 
 Working: `AcceptGroupApplication`, `AcceptGroupInvitation`, `AddMembers`, `ApplyToGroup`, `BlockEntity`, `ChangeMemberRole`, `CreateGroup`, `CreateRole`, `DeleteGroup`, `DeleteRole`, `GetGroup`, `InviteToGroup`, `IsMember`, `ListGroupApplications`, `ListGroupBlocks`, `ListGroupInvitations`, `ListGroupMembers`, `ListMembership`, `ListMembershipOpportunities`, `RemoveGroupApplication`, `RemoveGroupInvitation`, `RemoveMembers`, `UnblockEntity`, `UpdateGroup`, `UpdateRole`
+
+## Match
+
+Working: `CancelAllMatchmakingTicketsForPlayer`, `CancelMatchmakingTicket`, `CreateMatchmakingTicket`, `CreateServerMatchmakingTicket`, `GetMatch`, `GetMatchmakingQueue`, `GetMatchmakingTicket`, `GetQueueStatistics`, `JoinMatchmakingTicket`, `ListMatchmakingQueues`, `ListMatchmakingTicketsForPlayer`, `RemoveMatchmakingQueue`, `SetMatchmakingQueue`
+
+Not yet: CancelAllServerBackfillTicketsForPlayer, CancelServerBackfillTicket, CreateServerBackfillTicket, GetServerBackfillTicket, ListServerBackfillTicketsForPlayer, SubscribeToMatchmakingResource, UnsubscribeFromMatchmakingResource
 
 ## Profile
 
@@ -102,10 +108,6 @@ Not yet: CreateDraftItem, CreateUploadUrls, CreateView, DeleteEntityItemReviews,
 ## Inventory
 
 Not yet: AddInventoryItems, DeleteInventoryCollection, DeleteInventoryItems, ExecuteInventoryOperations, ExecuteTransferOperations, GetInventoryCollectionIds, GetInventoryItems, GetInventoryOperationStatus, GetTransactionHistory, PurchaseInventoryItems, RedeemAppleAppStoreInventoryItems, RedeemAppleAppStoreWithJwsInventoryItems, RedeemGooglePlayInventoryItems, RedeemMicrosoftStoreInventoryItems, RedeemNintendoEShopInventoryItems, RedeemPlayStationStoreInventoryItems, RedeemSteamInventoryItems, SubtractInventoryItems, TransferInventoryItems, UpdateInventoryItems
-
-## Match
-
-Not yet: CancelAllMatchmakingTicketsForPlayer, CancelAllServerBackfillTicketsForPlayer, CancelMatchmakingTicket, CancelServerBackfillTicket, CreateMatchmakingTicket, CreateServerBackfillTicket, CreateServerMatchmakingTicket, GetMatch, GetMatchmakingQueue, GetMatchmakingTicket, GetQueueStatistics, GetServerBackfillTicket, JoinMatchmakingTicket, ListMatchmakingQueues, ListMatchmakingTicketsForPlayer, ListServerBackfillTicketsForPlayer, RemoveMatchmakingQueue, SetMatchmakingQueue, SubscribeToMatchmakingResource, UnsubscribeFromMatchmakingResource
 
 ## TrueSkill
 

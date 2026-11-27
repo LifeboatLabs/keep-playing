@@ -1,5 +1,5 @@
 {
- "working": 340,
+ "working": 353,
  "total": 797,
  "retired": 46,
  "source": {
@@ -24,6 +24,10 @@
   "Group": {
    "working": 25,
    "total": 25
+  },
+  "Match": {
+   "working": 13,
+   "total": 20
   },
   "Profile": {
    "working": 5,
@@ -62,10 +66,6 @@
    "total": 31
   },
   "Inventory": {
-   "working": 0,
-   "total": 20
-  },
-  "Match": {
    "working": 0,
    "total": 20
   },
@@ -619,9 +619,9 @@
   "/Leaderboard/UpdateLeaderboardEntries": false,
   "/Statistic/UpdateStatistics": false,
   "/Locale/GetLanguageList": false,
-  "/Match/CancelAllMatchmakingTicketsForPlayer": false,
+  "/Match/CancelAllMatchmakingTicketsForPlayer": true,
   "/Match/CancelAllServerBackfillTicketsForPlayer": false,
-  "/Match/CancelMatchmakingTicket": false,
+  "/Match/CancelMatchmakingTicket": true,
   "/TrueSkill/CancelModel": false,
   "/Match/CancelServerBackfillTicket": false,
   "/TrueSkill/CreateBaseModel": false,
@@ -631,11 +631,11 @@
   "/MultiplayerServer/CreateBuildWithManagedContainer": false,
   "/MultiplayerServer/CreateBuildWithProcessBasedServer": false,
   "/Lobby/CreateLobby": false,
-  "/Match/CreateMatchmakingTicket": false,
+  "/Match/CreateMatchmakingTicket": true,
   "/MultiplayerServer/CreateRemoteUser": false,
   "/TrueSkill/CreateScenario": false,
   "/Match/CreateServerBackfillTicket": false,
-  "/Match/CreateServerMatchmakingTicket": false,
+  "/Match/CreateServerMatchmakingTicket": true,
   "/MultiplayerServer/CreateTitleMultiplayerServersQuotaChange": false,
   "/TrueSkill/DeactivateModel": false,
   "/MultiplayerServer/DeleteAsset": false,
@@ -661,9 +661,9 @@
   "/MultiplayerServer/GetCognitiveServicesToken": false,
   "/MultiplayerServer/GetContainerRegistryCredentials": false,
   "/Lobby/GetLobby": false,
-  "/Match/GetMatch": false,
-  "/Match/GetMatchmakingQueue": false,
-  "/Match/GetMatchmakingTicket": false,
+  "/Match/GetMatch": true,
+  "/Match/GetMatchmakingQueue": true,
+  "/Match/GetMatchmakingTicket": true,
   "/TrueSkill/GetModelDetails": false,
   "/TrueSkill/GetModelsByScenario": false,
   "/MultiplayerServer/GetMultiplayerServerAndToken": false,
@@ -674,7 +674,7 @@
   "/TrueSkill/GetPlayerSkillForConditions": false,
   "/TrueSkill/GetPlayerSkillForConditionsFromModel": false,
   "/TrueSkill/GetPlayerSkillFromModel": false,
-  "/Match/GetQueueStatistics": false,
+  "/Match/GetQueueStatistics": true,
   "/MultiplayerServer/GetRemoteLoginEndpoint": false,
   "/TrueSkill/GetScenarioConfiguration": false,
   "/TrueSkill/GetScenarioConfigurations": false,
@@ -686,7 +686,7 @@
   "/Lobby/JoinArrangedLobby": false,
   "/Lobby/JoinLobby": false,
   "/Lobby/JoinLobbyAsServer": false,
-  "/Match/JoinMatchmakingTicket": false,
+  "/Match/JoinMatchmakingTicket": true,
   "/Lobby/LeaveLobby": false,
   "/Lobby/LeaveLobbyAsServer": false,
   "/MultiplayerServer/ListArchivedMultiplayerServers": false,
@@ -696,8 +696,8 @@
   "/MultiplayerServer/ListCertificateSummaries": false,
   "/MultiplayerServer/ListContainerImages": false,
   "/MultiplayerServer/ListContainerImageTags": false,
-  "/Match/ListMatchmakingQueues": false,
-  "/Match/ListMatchmakingTicketsForPlayer": false,
+  "/Match/ListMatchmakingQueues": true,
+  "/Match/ListMatchmakingTicketsForPlayer": true,
   "/MultiplayerServer/ListMultiplayerServers": false,
   "/MultiplayerServer/ListPartyQosServers": false,
   "/MultiplayerServer/ListQosServersForTitle": false,
@@ -705,14 +705,14 @@
   "/Match/ListServerBackfillTicketsForPlayer": false,
   "/MultiplayerServer/ListTitleMultiplayerServersQuotaChanges": false,
   "/MultiplayerServer/ListVirtualMachineSummaries": false,
-  "/Match/RemoveMatchmakingQueue": false,
+  "/Match/RemoveMatchmakingQueue": true,
   "/Lobby/RemoveMember": false,
   "/MultiplayerServer/RequestMultiplayerServer": false,
   "/MultiplayerServer/RequestMultiplayerServerAndToken": false,
   "/Party/RequestParty": false,
   "/Party/RequestPartyService": false,
   "/MultiplayerServer/RolloverContainerRegistryCredentials": false,
-  "/Match/SetMatchmakingQueue": false,
+  "/Match/SetMatchmakingQueue": true,
   "/MultiplayerServer/ShutdownMultiplayerServer": false,
   "/Lobby/SubscribeToLobbyResource": false,
   "/Match/SubscribeToMatchmakingResource": false,
