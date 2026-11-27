@@ -72,7 +72,9 @@ module.exports = function register(on, app) {
       let p = app.players.byLink(kind, id);
       let created = false;
       if (!p) {
-        if (!body.CreateAccount) throw fail('AccountNotFound', 'User not found');
+        // Old games often sign in without CreateAccount, because their players
+        // already had accounts. createAccountsOnLogin makes those accounts.
+        if (!body.CreateAccount && !ctx.title.settings.createAccountsOnLogin) throw fail('AccountNotFound', 'User not found');
         p = app.players.create({ kind, value: id, now: ctx.now, title: ctx.title });
         created = true;
       }

@@ -74,6 +74,7 @@ function createApp(options = {}) {
     log,
     players: new Players(store),
     now: () => clock(),
+    customClock: !!options.now, // tests set the clock
     title: () => titles.get(store),
     saveTitle: (t) => titles.save(store, t),
     handlers: new Map(),
@@ -141,6 +142,10 @@ function createApp(options = {}) {
       return { player };
     };
     const fromSecret = () => {
+      // Some old games call a Server API from the game itself, with a key built in
+      // that nobody has any more. A title can open just those calls.
+      const open = app.title().settings.openServerCalls;
+      if (Array.isArray(open) && open.includes(url)) return { server: true };
       if (!app.isSecretKey(secret)) throw fail('NotAuthenticated', 'The X-SecretKey header is missing or wrong.', 401);
       return { server: true };
     };

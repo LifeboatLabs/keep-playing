@@ -79,6 +79,8 @@ Switches in `title.json` → `settings`:
 - `allowClientCurrency` (default `false`): let players add or take away their own currency.
 - `checkRequiredFields` (default `true`): refuse calls that leave out a required field, like PlayFab does.
 - `acceptAnySecretKey` (default `false`): for old game servers that have a secret key built in that nobody knows any more.
+- `openServerCalls` (default none): Server calls the game itself makes without a working key, like `["/Server/WritePlayerEvent"]`. This is safer than `acceptAnySecretKey`, because the Admin calls stay locked.
+- `createAccountsOnLogin` (default `false`): make an account when a game signs in with a new ID but leaves out `CreateAccount`. Old games often do this, because their players already had accounts.
 - `cloudScriptTimeoutMs` (default `10000`): how long a CloudScript function may run.
 
 ## What works
@@ -106,6 +108,12 @@ These are the big gaps, roughly in the order we'll work on them:
 - drop tables, web requests from CloudScript, and push notifications.
 
 **Steam sign-in doesn't check Valve's signature yet.** Keep Playing reads the Steam ID from the ticket, which is fine on your own computer. Don't run a public server with Steam sign-in until the signature is checked.
+
+## Games
+
+Settings folders for particular games live in [games](games):
+
+- **[OVERKILL's The Walking Dead](games/otwd)**: the weekly quest, the wandering NPC and bounties. It's based on [HW12Dev's emulator](https://github.com/HW12Dev/OTWDPlayFabEmulator), and it hasn't been tried with the real game yet.
 
 ## When a game's servers shut down
 

@@ -1128,6 +1128,63 @@ test('a title can be saved to a folder and brought back unchanged', async () => 
   }
 });
 
+test('OVERKILL\'s The Walking Dead: the calls the game makes all work', async () => {
+  const t = await start({ titleDir: path.join(ROOT, 'games', 'otwd') });
+  // The game signs in with the player's Steam ID, an empty title ID and no CreateAccount.
+  const login = await t.ok('/Client/LoginWithCustomID', { TitleId: '', CustomId: '76561198000000001' });
+  const auth = { 'X-Authorization': login.SessionTicket };
+  const run = async (name, a = auth) => {
+    const r = await t.ok('/Client/ExecuteCloudScript', { FunctionName: name }, a);
+    assert.equal(r.Error, undefined, `${name}: ${JSON.stringify(r.Error)}`);
+    return r.FunctionResult;
+  };
+
+  assert.equal(typeof (await run('GetSeed')).date, 'number');
+  let quest = await run('GetWeeklyQuest');
+  assert.equal(quest.status, 'Expired');
+  assert.ok(quest.quest.WeeklyQuestIndex >= 1 && quest.quest.WeeklyQuestIndex <= 14);
+  assert.ok([3000, 4000, 5000].includes(quest.quest.WeeklyXPReward));
+  assert.equal(quest.quest['WeeklyScrap/Prov/Equip/Med/Gold'].length, 5);
+  assert.equal(quest.quest.WeeklyWeaponRewardsIndices.length, 3);
+
+  // Everyone gets the same quest in a week.
+  const other = await t.ok('/Client/LoginWithCustomID', { TitleId: '', CustomId: '76561198000000002' });
+  const theirs = await run('GetWeeklyQuest', { 'X-Authorization': other.SessionTicket });
+  assert.deepEqual(theirs.quest, quest.quest);
+
+  assert.deepEqual(await run('ActivateWeeklyQuest'), { status: 'InProgress' });
+  assert.equal((await run('GetWeeklyQuest')).status, 'InProgress');
+  t.clock.now = new Date(t.clock.now.getTime() + 20 * 60 * 1000); // twenty minutes of zombies later
+  await t.ok('/Client/UpdateUserData', { Data: { WeeklyQuestDone: 'true' } }, auth);
+  assert.equal((await run('GetWeeklyQuest')).status, 'Completed');
+  // The other player hasn't done anything this week.
+  assert.equal((await run('GetWeeklyQuest', { 'X-Authorization': other.SessionTicket })).status, 'Expired');
+
+  const npc = await run('GetWeeklyNPC');
+  assert.equal(npc.npc.Inventory.length, 3);
+  assert.match(npc.npc.Inventory[0].Asset, /^SBZWeaponData'/);
+  assert.match(npc.npc.Inventory[2].Asset, /^SBZWeaponPartSchematic'/);
+  assert.match(npc.npc.Map.Asset, /^SBZLevelSchematic'\/Game\/Schematics\/Levels\/MainQuests\//);
+  assert.deepEqual(await run('ActivateWeeklyNPC'), { status: 'InProgress' });
+  assert.equal(await run('GetBounties'), 'Expired');
+
+  // The game never sees Keep Playing's own bookkeeping.
+  const ro = await t.ok('/Client/GetUserReadOnlyData', {}, auth);
+  assert.deepEqual(ro.Data, {});
+  await t.ok('/Client/GetTitleData', {}, auth);
+  await t.ok('/Client/WritePlayerEvent', { EventName: 'player_logged_in' }, auth);
+  // The game's server call works without the old key; the Admin calls stay locked.
+  await t.ok('/Server/WritePlayerEvent', { PlayFabId: login.PlayFabId, EventName: 'mission_end' }, { 'X-SecretKey': 'a key nobody has' });
+  await t.err('/Admin/GetTitleData', {}, { 'X-SecretKey': 'a key nobody has' }, 'NotAuthenticated');
+
+  // A week later the quest is new and nobody has started it.
+  t.clock.now = new Date(t.clock.now.getTime() + 7 * 24 * 3600 * 1000);
+  const later = await t.ok('/Client/LoginWithCustomID', { TitleId: '', CustomId: '76561198000000001' });
+  assert.equal(later.PlayFabId, login.PlayFabId);
+  assert.equal((await run('GetWeeklyQuest', { 'X-Authorization': later.SessionTicket })).status, 'Expired');
+  await t.stop();
+});
+
 // ---------------------------------------------------------------- run
 
 (async () => {

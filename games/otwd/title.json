@@ -1,0 +1,12 @@
+{
+  "titleId": null,
+  "name": "OVERKILL's The Walking Dead (community replacement)",
+  "settings": {
+    "createAccountsOnLogin": true,
+    "openServerCalls": ["/Server/WritePlayerEvent"],
+    "allowClientStatistics": true,
+    "allowClientCurrency": false,
+    "checkRequiredFields": true,
+    "acceptAnySecretKey": false
+  }
+}

@@ -58,6 +58,25 @@ module.exports = function register(on, app) {
         bridge('log', level, JSON.stringify([message === undefined ? null : String(message), data === undefined ? null : data]));
       };
     };
+    // Scripts see the server's clock. It's the real time, except in tests,
+    // which set the clock; then Date follows it.
+    if (setup.clockOffset) {
+      var RealDate = g.Date;
+      var offset = setup.clockOffset;
+      var KPDate = function () {
+        if (!(this instanceof KPDate)) return new RealDate(RealDate.now() + offset).toString();
+        var args = Array.prototype.slice.call(arguments);
+        var d = args.length === 0 ? new RealDate(RealDate.now() + offset)
+          : new (Function.prototype.bind.apply(RealDate, [null].concat(args)))();
+        Object.setPrototypeOf(d, KPDate.prototype);
+        return d;
+      };
+      KPDate.prototype = Object.create(RealDate.prototype, { constructor: { value: KPDate, writable: true, configurable: true } });
+      KPDate.now = function () { return RealDate.now() + offset; };
+      KPDate.UTC = RealDate.UTC;
+      KPDate.parse = RealDate.parse;
+      g.Date = KPDate;
+    }
     g.handlers = {};
     g.currentPlayerId = setup.currentPlayerId === null ? undefined : setup.currentPlayerId;
     g.script = { revision: setup.script.revision, titleId: setup.script.titleId === null ? undefined : setup.script.titleId };
@@ -176,6 +195,7 @@ module.exports = function register(on, app) {
       return '';
     };
     setupScript.runInContext(context, { displayErrors: false })(bridge, JSON.stringify({
+      clockOffset: app.customClock && now ? now.getTime() - Date.now() : 0,
       currentPlayerId: player ? player.id : null,
       script: { revision: rev.Revision, titleId: t.titleId || null },
     }));

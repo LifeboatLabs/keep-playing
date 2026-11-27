@@ -15,6 +15,11 @@ const SETTINGS = {
   checkRequiredFields: true,
   // Accept any X-SecretKey. Only for game servers whose key is built in and unknown.
   acceptAnySecretKey: false,
+  // Server calls the game itself makes without a working key, e.g. ["/Server/WritePlayerEvent"].
+  // Safer than acceptAnySecretKey, because the Admin calls stay locked.
+  openServerCalls: [],
+  // Make an account when a game signs in with a new ID but leaves out CreateAccount.
+  createAccountsOnLogin: false,
 };
 
 function emptyTitle() {
