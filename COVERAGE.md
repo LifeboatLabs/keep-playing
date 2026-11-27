@@ -1,6 +1,6 @@
 # What Keep Playing answers
 
-Keep Playing answers **310 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
+Keep Playing answers **315 of the 797** PlayFab calls that Microsoft still lists. (Microsoft's description has 843 calls; 46 of them are retired.)
 
 Every answer is checked against Microsoft's description in the tests. Made by `node tools/coverage.js` from [PlayFab/API_Specs](https://github.com/PlayFab/API_Specs) at commit `06cab88` (2026-11-18).
 
@@ -10,6 +10,7 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | Server | 119 | 163 |
 | Admin | 59 | 129 |
 | Profile | 5 | 10 |
+| File | 5 | 5 |
 | Event | 2 | 16 |
 | Authentication | 2 | 2 |
 | Object | 2 | 2 |
@@ -28,12 +29,11 @@ Every answer is checked against Microsoft's description in the tests. Made by `n
 | StateShare | 0 | 7 |
 | VersionedCatalog | 0 | 7 |
 | Insights | 0 | 6 |
-| File | 0 | 5 |
 | Party | 0 | 3 |
 | GameServerIdentity | 0 | 2 |
 | Sweepstakes | 0 | 2 |
 | Locale | 0 | 1 |
-| **All** | **310** | **797** |
+| **All** | **315** | **797** |
 
 ## Client
 
@@ -58,6 +58,10 @@ Not yet: AbortTaskInstance, AddLocalizedNews, CheckLimitedEditionItemAvailabilit
 Working: `GetProfile`, `GetProfiles`, `GetTitlePlayersFromMasterPlayerAccountIds`, `SetDisplayName`, `SetProfileLanguage`
 
 Not yet: GetGlobalPolicy, GetTitlePlayersFromXboxLiveIDs, SetAvatarUrl, SetGlobalPolicy, SetProfilePolicy
+
+## File
+
+Working: `AbortFileUploads`, `DeleteFiles`, `FinalizeFileUploads`, `GetFiles`, `InitiateFileUploads`
 
 ## Event
 
@@ -134,10 +138,6 @@ Not yet: CompleteVersionedCatalogUpload, CreateVersionedCatalogUploadURL, Delete
 ## Insights
 
 Not yet: GetDetails, GetLimits, GetOperationStatus, GetPendingOperations, SetPerformance, SetStorageRetention
-
-## File
-
-Not yet: AbortFileUploads, DeleteFiles, FinalizeFileUploads, GetFiles, InitiateFileUploads
 
 ## Party
 

@@ -26,6 +26,7 @@ const MODULES = [
   require('./apis/cloudscript'),
   require('./apis/events'),
   require('./apis/objects'),
+  require('./apis/files'),
   require('./apis/sharedgroups'),
   require('./apis/platforms'), // after auth: it uses app.auth
   require('./apis/characters'),
@@ -58,6 +59,17 @@ function hasProtoKey(value, depth = 0) {
     if (hasProtoKey(value[k], depth + 1)) return true;
   }
   return false;
+}
+
+// The address the game used to reach us, so addresses we hand out (like file
+// uploads) work for it too. Tunnels such as Cloudflare's say "https" in
+// X-Forwarded-Proto.
+function originOf(req) {
+  const host = String(req.headers.host || '');
+  if (!/^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(:\d{1,5})?$/.test(host)) return null;
+  const fwd = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase();
+  const proto = fwd === 'https' || fwd === 'http' ? fwd : req.socket && req.socket.encrypted ? 'https' : 'http';
+  return `${proto}://${host}`;
 }
 
 function createApp(options = {}) {
@@ -248,6 +260,19 @@ function createApp(options = {}) {
     if (req.method === 'GET' && (url === '/' || url === '/status')) {
       return send(res, 200, app.status());
     }
+    // Entity files are sent and fetched at addresses of their own (see apis/files.js).
+    if ((req.method === 'PUT' || req.method === 'GET') && url.startsWith('/files/')) {
+      let out;
+      try {
+        out = await app.files.http(req, url.slice('/files/'.length), new URL(req.url, 'http://localhost').searchParams);
+      } catch (e) {
+        log(`A file upload or download failed: ${e && e.stack ? e.stack : e}`, 'error');
+        out = { status: 500, headers: { 'Content-Type': 'text/plain; charset=utf-8' }, body: Buffer.from('Something went wrong inside Keep Playing.') };
+      }
+      if (res.destroyed) return;
+      res.writeHead(out.status, { ...out.headers, 'Content-Length': out.body.length, ...CORS });
+      return res.end(out.body);
+    }
     if (req.method !== 'POST') {
       return send(res, 405, { code: 405, status: 'MethodNotAllowed', error: 'InvalidRequest', errorCode: spec.errorCode('InvalidRequest'), errorMessage: 'PlayFab calls are POST requests.' });
     }
@@ -258,7 +283,7 @@ function createApp(options = {}) {
       const body = await readBody(req);
       if (!call) throw fail('NotImplemented', `${url} isn't a PlayFab call.`, 404);
       const auth = authenticate(call, req.headers, url);
-      const data = app.run(url, body, auth);
+      const data = app.run(url, body, { ...auth, origin: originOf(req) });
       note(url, true);
       send(res, 200, { code: 200, status: 'OK', data }, false);
       log(`${url} OK ${Date.now() - started}ms`, 'debug');
@@ -297,8 +322,9 @@ function createApp(options = {}) {
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, Accept-Encoding, X-Authorization, X-SecretKey, X-EntityToken, X-PlayFabSDK, X-ReportErrorAsSuccess',
+  'Access-Control-Allow-Methods': 'POST, GET, PUT, OPTIONS',
+  // The x-ms- headers are the ones games send with file uploads, for Azure storage.
+  'Access-Control-Allow-Headers': 'Content-Type, Content-Encoding, Accept-Encoding, X-Authorization, X-SecretKey, X-EntityToken, X-PlayFabSDK, X-ReportErrorAsSuccess, x-ms-blob-type, x-ms-version, x-ms-date, x-ms-client-request-id, x-ms-blob-content-type, Content-MD5',
   'Access-Control-Max-Age': '86400',
 };
 

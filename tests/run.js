@@ -10,6 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const zlib = require('node:zlib');
+const crypto = require('node:crypto');
 
 const { createApp } = require('../src/app');
 const spec = require('../src/spec');
@@ -918,6 +919,88 @@ test('entity objects: players change their own, version checks work', async () =
   await t.stop();
 });
 
+test('entity files: upload, finalise, download, and only the owner changes them', async () => {
+  const t = await start();
+  const a = await t.player('fay');
+  const b = await t.player('gus');
+  const bytes = Buffer.from([0, 1, 2, 3, 250, 251, 252, 253, 254, 255]);
+  const put = (url, body) => fetch(url, { method: 'PUT', body, headers: { 'x-ms-blob-type': 'BlockBlob' } });
+
+  const init = await t.ok('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'] }, a.entity);
+  const upload = init.UploadDetails[0];
+  assert.equal(upload.FileName, 'save.dat');
+  assert.ok(upload.UploadUrl.startsWith(`${t.base}/files/`));
+  await t.err('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'] }, a.entity, 'EntityFileOperationPending');
+  await t.err('/File/FinalizeFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'], ProfileVersion: init.ProfileVersion }, a.entity, 'FileNotFound');
+
+  // The game sends the file straight to the address, as it would to Azure.
+  let res = await put(upload.UploadUrl, bytes);
+  assert.equal(res.status, 201);
+  const fin = await t.ok('/File/FinalizeFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'], ProfileVersion: init.ProfileVersion }, a.entity);
+  const meta = fin.Metadata['save.dat'];
+  assert.equal(meta.Size, bytes.length);
+  assert.equal(meta.Checksum, crypto.createHash('md5').update(bytes).digest('base64'));
+  assert.equal(fin.ProfileVersion, init.ProfileVersion + 1);
+  res = await fetch(meta.DownloadUrl);
+  assert.equal(res.status, 200);
+  assert.deepEqual(Buffer.from(await res.arrayBuffer()), bytes);
+  res = await put(upload.UploadUrl, 'again'); // finalised, so the upload address is used up
+  assert.equal(res.status, 404);
+
+  // Others can look, but not change anything.
+  assert.deepEqual(Object.keys((await t.ok('/File/GetFiles', { Entity: a.entityKey }, b.entity)).Metadata), ['save.dat']);
+  await t.err('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['x'] }, b.entity, 'NotAuthorized');
+  await t.err('/File/DeleteFiles', { Entity: a.entityKey, FileNames: ['save.dat'] }, b.entity, 'NotAuthorized');
+
+  // Changed addresses don't work, and a download address can't upload.
+  const token = meta.DownloadUrl.slice(meta.DownloadUrl.lastIndexOf('/') + 1);
+  const [payload, sig] = token.split('.');
+  const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+  const forged = Buffer.from(JSON.stringify({ ...claims, x: claims.x + 1 })).toString('base64url');
+  assert.equal((await fetch(`${t.base}/files/${forged}.${sig}`)).status, 403);
+  assert.equal((await put(meta.DownloadUrl, 'x')).status, 403);
+  assert.equal((await put(`${upload.UploadUrl}?comp=block&blockid=AAAA`, 'x')).status, 501);
+
+  // Stopping one upload, replacing a file, and deleting it.
+  const again = await t.ok('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['save.dat', 'other.txt'] }, a.entity);
+  await t.ok('/File/AbortFileUploads', { Entity: a.entityKey, FileNames: ['other.txt'] }, a.entity);
+  await t.err('/File/AbortFileUploads', { Entity: a.entityKey, FileNames: ['other.txt'] }, a.entity, 'NoEntityFileOperationPending');
+  assert.equal((await put(again.UploadDetails[0].UploadUrl, 'new save')).status, 201);
+  const fin2 = await t.ok('/File/FinalizeFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'], ProfileVersion: 0 }, a.entity);
+  assert.equal(await (await fetch(fin2.Metadata['save.dat'].DownloadUrl)).text(), 'new save');
+  assert.equal((await fetch(meta.DownloadUrl)).status, 404); // the old copy is gone
+  await t.err('/File/FinalizeFileUploads', { Entity: a.entityKey, FileNames: ['save.dat'], ProfileVersion: 0 }, a.entity, 'NoEntityFileOperationPending');
+  await t.err('/File/DeleteFiles', { Entity: a.entityKey, FileNames: ['save.dat'], ProfileVersion: 0 }, a.entity, 'EntityProfileVersionMismatch');
+  await t.ok('/File/DeleteFiles', { Entity: a.entityKey, FileNames: ['save.dat'] }, a.entity);
+  await t.err('/File/DeleteFiles', { Entity: a.entityKey, FileNames: ['save.dat'] }, a.entity, 'FileNotFound');
+  assert.deepEqual((await t.ok('/File/GetFiles', { Entity: a.entityKey }, a.entity)).Metadata, {});
+
+  // The title's files are for the game itself to change.
+  const tt = await t.ok('/Authentication/GetEntityToken', {}, t.secret);
+  const title = { 'X-EntityToken': tt.EntityToken };
+  const ti = await t.ok('/File/InitiateFileUploads', { Entity: tt.Entity, FileNames: ['levels.json'] }, title);
+  assert.equal((await put(ti.UploadDetails[0].UploadUrl, '[1,2,3]')).status, 201);
+  await t.ok('/File/FinalizeFileUploads', { Entity: tt.Entity, FileNames: ['levels.json'], ProfileVersion: ti.ProfileVersion }, title);
+  const tf = await t.ok('/File/GetFiles', { Entity: tt.Entity }, a.entity);
+  assert.equal(await (await fetch(tf.Metadata['levels.json'].DownloadUrl)).text(), '[1,2,3]');
+  await t.err('/File/DeleteFiles', { Entity: tt.Entity, FileNames: ['levels.json'] }, a.entity, 'NotAuthorized');
+
+  // Deleting a player deletes their files.
+  const bi = await t.ok('/File/InitiateFileUploads', { Entity: b.entityKey, FileNames: ['b.sav'] }, b.entity);
+  await put(bi.UploadDetails[0].UploadUrl, 'gus was here');
+  const bf = await t.ok('/File/FinalizeFileUploads', { Entity: b.entityKey, FileNames: ['b.sav'], ProfileVersion: bi.ProfileVersion }, b.entity);
+  await t.ok('/Server/DeletePlayer', { PlayFabId: b.id }, t.secret);
+  assert.equal((await fetch(bf.Metadata['b.sav'].DownloadUrl)).status, 404);
+
+  // An upload left unfinished is forgotten after an hour; download addresses last a day.
+  await t.ok('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['left.dat'] }, a.entity);
+  t.clock.now = new Date(t.clock.now.getTime() + 61 * 60 * 1000);
+  await t.ok('/File/InitiateFileUploads', { Entity: a.entityKey, FileNames: ['left.dat'] }, a.entity);
+  t.clock.now = new Date(t.clock.now.getTime() + 25 * 60 * 60 * 1000);
+  assert.equal((await fetch(tf.Metadata['levels.json'].DownloadUrl)).status, 403);
+  await t.stop();
+});
+
 test('shared groups: members share data, others see only what\'s public', async () => {
   const t = await start();
   const a = await t.player('sg-a');
@@ -1312,6 +1395,9 @@ test('players are saved to disk and survive a restart', async () => {
     const p = await t.player('ida');
     await t.ok('/Client/UpdateUserData', { Data: { saved: 'yes' } }, p.auth);
     await t.ok('/Server/SetTitleData', { Key: 'motd', Value: 'kept' }, t.secret);
+    const up = await t.ok('/File/InitiateFileUploads', { Entity: p.entityKey, FileNames: ['ida.sav'] }, p.entity);
+    await fetch(up.UploadDetails[0].UploadUrl, { method: 'PUT', body: 'level 3' });
+    await t.ok('/File/FinalizeFileUploads', { Entity: p.entityKey, FileNames: ['ida.sav'], ProfileVersion: up.ProfileVersion }, p.entity);
     const secret = t.app.keys.secretKey;
     await t.stop();
 
@@ -1325,6 +1411,8 @@ test('players are saved to disk and survive a restart', async () => {
     assert.equal(td.Data.motd, 'kept');
     // An old session ticket still works after a restart (same signing key).
     await t.ok('/Client/GetAccountInfo', {}, p.auth);
+    const files = await t.ok('/File/GetFiles', { Entity: p.entityKey }, p.entity);
+    assert.equal(await (await fetch(files.Metadata['ida.sav'].DownloadUrl)).text(), 'level 3');
     await t.stop();
 
     // A half-written last line (a crash mid-write) is skipped.

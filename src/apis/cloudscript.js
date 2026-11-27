@@ -138,7 +138,7 @@ module.exports = function register(on, app) {
   }
 
   // Runs one CloudScript function and returns ExecuteCloudScriptResult.
-  function execute({ player, functionName, args, selection, specific, now }) {
+  function execute({ player, functionName, args, selection, specific, now, origin }) {
     const t = app.title();
     const rev = pickRevision(t, selection, specific);
     const timeout = t.settings.cloudScriptTimeoutMs || DEFAULT_TIMEOUT_MS;
@@ -186,7 +186,7 @@ module.exports = function register(on, app) {
           const url = resolve(group, apiName);
           if (!url) return JSON.stringify({ ok: false, message: `${group}.${apiName} is not a function` });
           const request = JSON.parse(text);
-          const auth = group === 'server' ? { server: true } : { server: true, entity: titleEntity };
+          const auth = group === 'server' ? { server: true, origin } : { server: true, entity: titleEntity, origin };
           apiCount++;
           try {
             return JSON.stringify({ ok: true, data: app.run(url, request, auth) });
@@ -280,20 +280,21 @@ module.exports = function register(on, app) {
     return result;
   }
 
-  const fromBody = (body, player, now) => execute({
+  const fromBody = (body, player, ctx) => execute({
     player,
     functionName: String(body.FunctionName),
     args: clone(body.FunctionParameter),
     selection: body.RevisionSelection || 'Live',
     specific: body.SpecificRevision,
-    now,
+    now: ctx.now,
+    origin: ctx.origin, // so file addresses made inside CloudScript point at us
   });
 
-  on('/Client/ExecuteCloudScript', (body, ctx) => fromBody(body, ctx.player, ctx.now));
+  on('/Client/ExecuteCloudScript', (body, ctx) => fromBody(body, ctx.player, ctx));
   on('/Server/ExecuteCloudScript', (body, ctx) => {
     const p = app.players.byId(body.PlayFabId);
     if (!p) throw fail('AccountNotFound', 'User not found');
-    return fromBody(body, p, ctx.now);
+    return fromBody(body, p, ctx);
   });
   on('/CloudScript/ExecuteEntityCloudScript', (body, ctx) => {
     let player = ctx.player;
@@ -301,7 +302,7 @@ module.exports = function register(on, app) {
       player = body.Entity.Type === 'title_player_account' ? app.players.byEntity(body.Entity.Id)
         : body.Entity.Type === 'master_player_account' ? app.players.byId(body.Entity.Id) : null;
     }
-    return fromBody(body, player || null, ctx.now);
+    return fromBody(body, player || null, ctx);
   });
 
   // Admin: uploading and choosing revisions. Classic CloudScript has one version, 1.

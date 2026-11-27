@@ -1,5 +1,5 @@
 {
- "working": 310,
+ "working": 315,
  "total": 797,
  "retired": 46,
  "source": {
@@ -24,6 +24,10 @@
   "Profile": {
    "working": 5,
    "total": 10
+  },
+  "File": {
+   "working": 5,
+   "total": 5
   },
   "Event": {
    "working": 2,
@@ -96,10 +100,6 @@
   "Insights": {
    "working": 0,
    "total": 6
-  },
-  "File": {
-   "working": 0,
-   "total": 5
   },
   "Party": {
    "working": 0,
@@ -472,12 +472,12 @@
   "/CloudScript/RegisterHttpFunction": false,
   "/CloudScript/RegisterQueuedFunction": false,
   "/CloudScript/UnregisterFunction": false,
-  "/File/AbortFileUploads": false,
-  "/File/DeleteFiles": false,
-  "/File/FinalizeFileUploads": false,
-  "/File/GetFiles": false,
+  "/File/AbortFileUploads": true,
+  "/File/DeleteFiles": true,
+  "/File/FinalizeFileUploads": true,
+  "/File/GetFiles": true,
   "/Object/GetObjects": true,
-  "/File/InitiateFileUploads": false,
+  "/File/InitiateFileUploads": true,
   "/Object/SetObjects": true,
   "/Inventory/AddInventoryItems": false,
   "/VersionedCatalog/CompleteVersionedCatalogUpload": false,

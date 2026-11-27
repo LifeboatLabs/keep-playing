@@ -11,6 +11,8 @@ same family as Done With To Do, Done With Windows 10 and Save Your Game. Not aff
 - `src/store.js`: in-memory records plus an append-only journal and snapshot in the data folder.
 - `src/players.js`, `src/title.js`, `src/tokens.js`, `src/errors.js`: accounts, the title folder, signed tickets, errors.
 - `src/apis/*.js`: the calls, one area per file. Register with `on(url, (body, ctx) => result)`.
+- `src/apis/files.js`: entity files. Games upload and download at signed `/files/` addresses (not PlayFab
+  calls, answered like Azure storage); contents go in `<data>/files/`, or memory without a data folder.
 - `spec/calls.json`: generated from Microsoft's PlayFab/API_Specs (Apache-2.0) by `tools/gen-spec.js`.
 - `title-example/`: a complete example title folder; the tests use it.
 - `tools/export-title.js`: saves a real PlayFab title's settings into a title folder (read-only Admin calls).
@@ -39,7 +41,7 @@ Steam tickets and other platform tokens (Apple, Nintendo, Battle.net, OpenID...)
 the player ID is read from them (README says so). Google, Facebook, Xbox, PSN and Twitch sign-ins can't be
 supported that way. CloudScript runs in its own vm context and talks to the server through text only, but
 it isn't a sandbox.
-No matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet. Characters can't buy items
+No matchmaking, lobbies, Economy v2, groups, character entities or Azure Functions yet. Characters can't buy items
 (PurchaseItem with a CharacterId says NotImplemented).
 
 ## Tests

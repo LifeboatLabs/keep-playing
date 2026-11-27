@@ -3,51 +3,12 @@
 // entity profiles.
 
 const { fail } = require('../errors');
+const { entityHolder } = require('./common');
 
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
 module.exports = function register(on, app) {
-  // Finds where an entity's objects live, and checks the caller may use them.
-  function holder(entityKey, ctx, write) {
-    const key = entityKey || ctx.entity;
-    if (!key || typeof key.Id !== 'string') throw fail('InvalidParams', 'Invalid input parameters', 400, { Entity: ['The Entity field is required.'] });
-    const type = key.Type || key.TypeString;
-    if (type === 'title_player_account' || type === 'master_player_account') {
-      const p = type === 'title_player_account' ? app.players.byEntity(key.Id) : app.players.byId(key.Id);
-      if (!p) throw fail('ProfileDoesNotExist', `There is no ${type} ${key.Id}.`);
-      const own = ctx.player && ctx.player.id === p.id;
-      if (!own && !ctx.server && write) throw fail('NotAuthorized', 'Players can only change their own objects.', 403);
-      const field = type === 'title_player_account' ? 'objects' : 'masterObjects';
-      return {
-        entity: { Id: type === 'title_player_account' ? p.entityId : p.id, Type: type, TypeString: type },
-        get: () => (p[field] = p[field] || {}),
-        version: () => p.profileVersion || 0,
-        save: () => {
-          p.profileVersion = (p.profileVersion || 0) + 1;
-          app.players.save(p);
-          return p.profileVersion;
-        },
-        player: p,
-        type,
-      };
-    }
-    if (type === 'title') {
-      const t = app.title();
-      if (write && !ctx.server) throw fail('NotAuthorized', 'Only the game itself can change title objects.', 403);
-      return {
-        entity: { Id: t.titleId || key.Id, Type: 'title', TypeString: 'title' },
-        get: () => (t.objects = t.objects || {}),
-        version: () => t.objectsVersion || 0,
-        save: () => {
-          t.objectsVersion = (t.objectsVersion || 0) + 1;
-          app.saveTitle(t);
-          return t.objectsVersion;
-        },
-        type,
-      };
-    }
-    throw fail('NotImplemented', `Keep Playing doesn't support ${type || 'that kind of'} entities yet.`, 501);
-  }
+  const holder = (entityKey, ctx, write) => entityHolder(app, entityKey, ctx, write, 'objects');
 
   const view = (objects, escape) => {
     const out = {};

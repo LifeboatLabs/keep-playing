@@ -268,6 +268,7 @@ module.exports = function register(on, app) {
 
   const deletePlayer = (body, ctx) => {
     const p = target(body, ctx);
+    app.files.removePlayer(p);
     app.players.remove(p);
     for (const other of app.players.all()) {
       if (other.friends.includes(p.id)) {

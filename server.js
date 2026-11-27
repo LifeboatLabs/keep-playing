@@ -89,6 +89,9 @@ function main() {
   });
 
   server.listen(opts.port, opts.host, () => {
+    // For addresses made where there's no request to go by (inside CloudScript).
+    const local = opts.host === '0.0.0.0' || opts.host === '::' ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host;
+    app.publicUrl = `http://${local}:${opts.port}`;
     const s = app.status();
     const t = app.title();
     console.log(`Keep Playing ${app.version} is running at http://${opts.host === '0.0.0.0' ? 'localhost' : opts.host}:${opts.port}`);
