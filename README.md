@@ -121,11 +121,15 @@ Pointing a finished game at a new address can be fiddly. It's a job for the game
 
 If your game uses PlayFab, closing it can look like this:
 
-1. Export your title's settings into a folder like `title-example`.
-2. Ship a last update that lets players change the server address, or points at a community server.
-3. Hand players Keep Playing and the folder.
+1. **Save your title's settings into a folder** before you switch it off:
 
-A tool that does step 1 from your PlayFab title is next on the list.
+   ```
+   node tools/export-title.js --title-id ABCD --out ./my-game --store your_store_id
+   ```
+
+   It asks for the secret key in the `PLAYFAB_SECRET_KEY` environment variable (or `--secret-key`). It only reads, and it only talks to your own title. It saves title data, internal title data, catalogs (`--catalog` for each one beyond the primary), stores (`--store` for each one, because PlayFab has no call that lists them), currencies, statistics, the live CloudScript and news. Player accounts aren't included.
+2. **Ship a last update** that lets players change the server address, or points at a community server.
+3. **Hand players Keep Playing and the folder.** `node server.js --title ./my-game` brings it all back. The tests check that a saved title comes back exactly as it was.
 
 ## Safety
 

@@ -13,6 +13,7 @@ same family as Done With To Do, Done With Windows 10 and Save Your Game. Not aff
 - `src/apis/*.js`: the calls, one area per file. Register with `on(url, (body, ctx) => result)`.
 - `spec/calls.json`: generated from Microsoft's PlayFab/API_Specs (Apache-2.0) by `tools/gen-spec.js`.
 - `title-example/`: a complete example title folder; the tests use it.
+- `tools/export-title.js`: saves a real PlayFab title's settings into a title folder (read-only Admin calls).
 
 ## Rules
 - No dependencies, no build step. Node 22+, standard library only.

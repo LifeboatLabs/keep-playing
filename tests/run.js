@@ -104,7 +104,7 @@ async function start(options = {}) {
       r();
     });
   });
-  return { app, clock, call, ok, err, raw, secret, player, stop };
+  return { app, clock, call, ok, err, raw, secret, player, stop, base };
 }
 
 // ---------------------------------------------------------------- the description itself
@@ -1077,6 +1077,52 @@ test('restarting with the title folder keeps what changed while running', async 
       assert.equal(hello.Revision, 3);
       await t.stop();
     }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a title can be saved to a folder and brought back unchanged', async () => {
+  const { exportTitle, safeFileName } = require('../tools/export-title');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'keep-playing-export-'));
+  const out = path.join(dir, 'my-game');
+  try {
+    const source = await start();
+    await source.ok('/Admin/AddNews', { Title: 'Last day', Body: 'Thanks for playing.' }, source.secret);
+    await source.ok('/Admin/SetTitleInternalData', { Key: 'serverOnly', Value: 'yes' }, source.secret);
+    const summary = await exportTitle({
+      titleId: '1A2B3', secretKey: source.app.keys.secretKey, out, server: source.base, stores: ['weekend_sale', 'missing_store'],
+    });
+    assert.equal(summary.skipped.length, 1); // the store that doesn't exist
+    assert.ok(fs.existsSync(path.join(out, 'cloudscript', 'cloudscript.js')));
+    await assert.rejects(exportTitle({ titleId: '1A2B3', secretKey: source.app.keys.secretKey, out, server: source.base }), /isn't empty/);
+    await assert.rejects(exportTitle({ titleId: '1A2B3', secretKey: 'wrong', out: path.join(dir, 'other'), server: source.base }), /NotAuthenticated/);
+
+    const copy = await start({ titleDir: out });
+    const same = async (url, body = {}) => {
+      const a = await source.ok(url, body, source.secret);
+      const b = await copy.ok(url, body, copy.secret);
+      assert.deepEqual(b, a, `${url} differs after the round trip`);
+    };
+    await same('/Admin/GetTitleData');
+    await same('/Admin/GetTitleInternalData');
+    await same('/Admin/GetCatalogItems');
+    await same('/Admin/GetStoreItems', { StoreId: 'weekend_sale' });
+    await same('/Admin/ListVirtualCurrencyTypes');
+    await same('/Admin/GetPlayerStatisticDefinitions');
+    await same('/Server/GetTitleNews', { Count: 100 });
+    const p = await copy.player('saved');
+    const hello = await copy.ok('/Client/ExecuteCloudScript', { FunctionName: 'helloWorld' }, p.auth);
+    assert.equal(hello.FunctionResult.messageValue, `Hello ${p.id}!`);
+    await source.stop();
+    await copy.stop();
+
+    // CloudScript file names can't escape the folder.
+    const used = new Set();
+    assert.equal(safeFileName('../../etc/passwd', used), 'passwd.js');
+    assert.equal(safeFileName('a b/c?.js', used), 'c_.js');
+    assert.equal(safeFileName('c_.js', used), 'c_-2.js');
+    assert.equal(safeFileName('...', used), 'cloudscript.js');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
