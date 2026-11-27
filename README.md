@@ -2,7 +2,7 @@
 
 **A free, open-source server that answers PlayFab calls.** PlayFab is the Microsoft service that many games use for sign-ins, saves, shops, leaderboards and server-side scripts. Keep Playing runs on your own computer and answers those calls itself, so you can:
 
-- **test a game offline** without touching your live PlayFab title;
+- **test a game offline** without touching your live PlayFab title, or using up the 1,000 players PlayFab's free Development Mode allows ([for developers](#for-developers-test-without-playfab));
 - **give players a way to keep playing** when a game's online services shut down.
 
 It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing to install from npm and no database to set up.
@@ -134,6 +134,38 @@ Switches in `title.json` → `settings`:
 - `openServerCalls` (default none): Server calls the game itself makes without a working key, like `["/Server/WritePlayerEvent"]`. This is safer than `acceptAnySecretKey`, because the Admin calls stay locked.
 - `createAccountsOnLogin` (default `false`): make an account when a game signs in with a new ID but leaves out `CreateAccount`. Old games often do this, because their players already had accounts.
 - `cloudScriptTimeoutMs` (default `10000`): how long a CloudScript function may run.
+
+## For developers: test without PlayFab
+
+Keep Playing is like Firebase's local emulators, but for PlayFab. Point your game or your automated tests at it, and they run offline, with nothing billed and nothing touching your live title.
+
+That matters more since March 2026. A title in PlayFab's free Development Mode can now only ever create [1,000 players](https://learn.microsoft.com/en-gb/gaming/playfab/pricing/development-mode), and once it has, no new players can be made until the title moves to a paid plan. Tests that make a fresh player each run use that up quickly. Keep Playing has no limit.
+
+1. **Keep your title's settings in your repository.** Save them once with `tools/export-title.js` (see [For studios](#for-studios-an-end-of-life-plan)), or write the files by hand: [title-example](title-example) has one of each.
+2. **Start Keep Playing with that folder and an empty data folder**, so each run starts with no players:
+
+   ```
+   node server.js --title ./playfab-title --data ./playfab-test-data
+   ```
+
+3. **Point the SDK at `http://localhost:8080`** (see [Point your game at it](#point-your-game-at-it)). Server and Admin calls need the secret key: it's `secretKey` in `keys.json`, in the data folder.
+
+Requests are checked against Microsoft's description of each call, so a missing field or a value of the wrong type fails with `InvalidParams`, the way it would on PlayFab. Errors use PlayFab's own names. A call Keep Playing can't answer yet fails with `NotImplemented` (HTTP 501), so a test tells you straight away. [COVERAGE.md](COVERAGE.md) lists every call it answers, and [What doesn't work yet](#what-doesnt-work-yet) lists the big gaps, like the newer economy and lobbies.
+
+In GitHub Actions:
+
+```yaml
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+- name: Start Keep Playing
+  run: |
+    git clone --depth 1 https://github.com/LifeboatLabs/keep-playing "$RUNNER_TEMP/keep-playing"
+    node "$RUNNER_TEMP/keep-playing/server.js" --title ./playfab-title --data "$RUNNER_TEMP/playfab-data" &
+    until curl -sf http://localhost:8080/status > /dev/null; do sleep 0.2; done
+- name: Test
+  run: npm test # with the PlayFab SDK pointed at http://localhost:8080
+```
 
 ## What works
 
