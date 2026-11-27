@@ -13,7 +13,7 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 
 This is an early version (0.1).
 
-- **It answers 279 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
+- **It answers 310 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
 - **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check almost 400 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
 - **It hasn't been tried with a real game yet.** If you make games or mods with PlayFab, please try it and [tell us what broke](https://github.com/LifeboatLabs/keep-playing/issues).
 
@@ -93,6 +93,7 @@ Switches in `title.json` → `settings`:
 - **Shared groups**: small groups of players who share data, with public and private keys.
 - **Statistics**: player statistics with Last, Min, Max and Sum, and hourly, daily, weekly and monthly resets. Also classic leaderboards, including the leaderboard around a player.
 - **Economy**: the classic economy, with catalogs, stores, bundles, containers and keys, consumable and stackable items, and virtual currency that recharges.
+- **Characters**: the classic characters a player can have, each with its own data, statistics, leaderboards, items and currency. Buying an item straight into a character's inventory doesn't work yet.
 - **CloudScript**: classic CloudScript, with `handlers`, `server.*`, `entity.*`, `log`, revisions and time limits.
 - **Entities**: entity objects and entity profiles.
 - **Events**: PlayStream and telemetry events. They're accepted and counted, and never sent anywhere.
@@ -101,7 +102,6 @@ Switches in `title.json` → `settings`:
 
 These are the big gaps, roughly in the order we'll work on them:
 
-- characters;
 - matchmaking and lobbies;
 - the newer economy (Catalog and Inventory), the newer leaderboards and statistics, and groups;
 - entity files and CloudScript that runs on Azure Functions;

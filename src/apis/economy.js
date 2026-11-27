@@ -2,7 +2,7 @@
 // PlayFab's classic economy: catalogs, stores, virtual currency and inventory.
 
 const { fail } = require('../errors');
-const { targetPlayer } = require('./common');
+const { targetPlayer, own } = require('./common');
 const { hexId } = require('../tokens');
 const { normaliseItem } = require('../title');
 
@@ -10,7 +10,7 @@ const DAY_S = 24 * 60 * 60;
 
 function catalog(title, version) {
   const v = version || title.primaryCatalog;
-  return (v && title.catalogs[v]) || null;
+  return (v && own(title.catalogs, v)) || null;
 }
 
 function findItem(title, version, itemId) {
@@ -128,8 +128,13 @@ function currency(app, p, now) {
 
 module.exports = function register(on, app) {
   const target = (body, ctx) => targetPlayer(app, body, ctx);
-  const noCharacters = (body) => {
-    if (body.CharacterId) throw fail('CharacterNotFound', "Keep Playing doesn't support characters yet.");
+  // Calls with a CharacterId work on that character's inventory instead of
+  // the player's. Returns what holds the items; save the player afterwards.
+  const holderOf = (p, body) => {
+    if (!body.CharacterId) return p;
+    const c = own(p.characters, body.CharacterId);
+    if (!c) throw fail('CharacterNotFound', `This player has no character ${body.CharacterId}.`);
+    return c;
   };
   const knownCurrency = (code) => {
     if (!app.title().currencies.some((c) => c.CurrencyCode === code)) {
@@ -141,7 +146,7 @@ module.exports = function register(on, app) {
   const getCatalog = (body) => ({ Catalog: clean(catalog(app.title(), body.CatalogVersion) || []) });
   const getStore = (body) => {
     const t = app.title();
-    const s = t.stores[body.StoreId];
+    const s = own(t.stores, body.StoreId);
     if (!s) throw fail('StoreNotFound', `There is no store called ${body.StoreId}.`);
     return {
       Store: clean(s.items),
@@ -158,7 +163,6 @@ module.exports = function register(on, app) {
 
   // Inventory and balances.
   const getInventory = (body, ctx) => {
-    noCharacters(body);
     const p = target(body, ctx);
     if (prune(p, ctx.now)) app.players.save(p);
     const vc = currency(app, p, ctx.now);
@@ -193,14 +197,16 @@ module.exports = function register(on, app) {
   }
 
   on('/Client/PurchaseItem', (body, ctx) => {
-    noCharacters(body);
+    // PlayFab's documentation doesn't say whose currency pays when buying for a
+    // character, so Keep Playing doesn't guess.
+    if (body.CharacterId) throw fail('NotImplemented', "Keep Playing can't buy items for a character yet.", 501);
     const t = app.title();
     const p = ctx.player;
     const item = findItem(t, body.CatalogVersion, body.ItemId);
     if (!item) throw fail('ItemNotFound', `There is no item called ${body.ItemId} in the catalog.`);
     let prices = item.VirtualCurrencyPrices || {};
     if (body.StoreId) {
-      const s = t.stores[body.StoreId];
+      const s = own(t.stores, body.StoreId);
       if (!s) throw fail('StoreNotFound', `There is no store called ${body.StoreId}.`);
       const inStore = s.items.find((i) => i.ItemId === body.ItemId);
       if (!inStore) throw fail('ItemNotFound', `${body.ItemId} isn't sold in ${body.StoreId}.`);
@@ -219,16 +225,16 @@ module.exports = function register(on, app) {
   });
 
   const consume = (body, ctx) => {
-    noCharacters(body);
     const p = target(body, ctx);
-    const inst = p.inventory.find((i) => i.ItemInstanceId === body.ItemInstanceId);
+    const h = holderOf(p, body);
+    const inst = h.inventory.find((i) => i.ItemInstanceId === body.ItemInstanceId);
     if (!inst) throw fail('ItemNotFound', 'That item isn\'t in the player\'s inventory.');
     if (typeof inst.RemainingUses !== 'number') throw fail('InvalidItemProperties', "That item can't be used up.");
     const count = body.ConsumeCount;
     if (!Number.isInteger(count) || count < 1) throw fail('InvalidParams', 'Invalid input parameters', 400, { ConsumeCount: ['ConsumeCount should be 1 or more.'] });
     if (inst.RemainingUses < count) throw fail('NoRemainingUses', 'That item doesn\'t have that many uses left.');
     inst.RemainingUses -= count;
-    if (inst.RemainingUses === 0) p.inventory = p.inventory.filter((i) => i !== inst);
+    if (inst.RemainingUses === 0) h.inventory = h.inventory.filter((i) => i !== inst);
     app.players.save(p);
     return { ItemInstanceId: inst.ItemInstanceId, RemainingUses: inst.RemainingUses };
   };
@@ -260,9 +266,8 @@ module.exports = function register(on, app) {
   };
   for (const api of ['Server', 'Admin']) {
     on(`/${api}/RevokeInventoryItem`, (body, ctx) => {
-      noCharacters(body);
       const p = target(body, ctx);
-      if (!revokeOne(p, body.ItemInstanceId)) throw fail('ItemNotFound', 'That item isn\'t in the player\'s inventory.');
+      if (!revokeOne(holderOf(p, body), body.ItemInstanceId)) throw fail('ItemNotFound', 'That item isn\'t in the player\'s inventory.');
       app.players.save(p);
       return {};
     });
@@ -270,8 +275,10 @@ module.exports = function register(on, app) {
       const errors = [];
       for (const it of body.Items || []) {
         const p = app.players.byId(it.PlayFabId);
+        const h = p && (it.CharacterId ? own(p.characters, it.CharacterId) : p);
         if (!p) errors.push({ Item: it, Error: 'AccountNotFound' });
-        else if (!revokeOne(p, it.ItemInstanceId)) errors.push({ Item: it, Error: 'ItemNotFound' });
+        else if (!h) errors.push({ Item: it, Error: 'CharacterNotFound' });
+        else if (!revokeOne(h, it.ItemInstanceId)) errors.push({ Item: it, Error: 'ItemNotFound' });
         else app.players.save(p);
       }
       return { Errors: errors };
@@ -291,9 +298,8 @@ module.exports = function register(on, app) {
   });
 
   on('/Server/UpdateUserInventoryItemCustomData', (body, ctx) => {
-    noCharacters(body);
     const p = target(body, ctx);
-    const inst = p.inventory.find((i) => i.ItemInstanceId === body.ItemInstanceId);
+    const inst = holderOf(p, body).inventory.find((i) => i.ItemInstanceId === body.ItemInstanceId);
     if (!inst) throw fail('ItemNotFound', 'That item isn\'t in the player\'s inventory.');
     inst.CustomData = inst.CustomData || {};
     for (const [k, v] of Object.entries(body.Data || {})) {
@@ -307,32 +313,35 @@ module.exports = function register(on, app) {
   });
 
   // Containers: a box item, maybe opened with a key item.
-  function unlock(p, containerInst, keyInst, ctx, version) {
+  // h holds the items (the player, or one of their characters); p is saved.
+  function unlock(p, h, containerInst, keyInst, ctx, version) {
     const t = app.title();
     const item = findItem(t, version || containerInst.CatalogVersion, containerInst.ItemId);
     if (!item || !item.Container) throw fail('InvalidContainerItem', `${containerInst.ItemId} isn't a container.`);
     const keyId = item.Container.KeyItemId;
     if (keyId) {
-      if (!keyInst) keyInst = p.inventory.find((i) => i.ItemId === keyId);
+      if (!keyInst) keyInst = h.inventory.find((i) => i.ItemId === keyId);
       if (!keyInst || keyInst.ItemId !== keyId) throw fail('KeyNotOwned', `Opening this needs a ${keyId}.`);
     }
     const use = (inst) => {
       if (typeof inst.RemainingUses === 'number' && inst.RemainingUses > 1) inst.RemainingUses -= 1;
-      else p.inventory = p.inventory.filter((i) => i !== inst);
+      else h.inventory = h.inventory.filter((i) => i !== inst);
     };
     use(containerInst);
     if (keyId) use(keyInst);
     const granted = [];
     for (const id of item.Container.ItemContents || []) {
       const child = findItem(t, item.CatalogVersion, id);
-      if (child) granted.push(...grant(t, p, child, ctx.now, {}));
+      if (child) granted.push(...grant(t, h, child, ctx.now, {}));
     }
     if ((item.Container.ResultTableContents || []).length) {
       app.warnOnce('droptables', 'a container uses drop tables, which Keep Playing does not support yet, so those items were not given.');
     }
+    // Currency in the container goes to whoever opened it: the character, if
+    // the game named one. PlayFab's documentation only says "the player".
     const vc = {};
     for (const [code, amount] of Object.entries(item.Container.VirtualCurrencyContents || {})) {
-      p.vc[code] = (p.vc[code] || 0) + amount;
+      h.vc[code] = (h.vc[code] || 0) + amount;
       vc[code] = amount;
     }
     app.players.save(p);
@@ -345,20 +354,20 @@ module.exports = function register(on, app) {
   }
 
   const unlockItem = (body, ctx) => {
-    noCharacters(body);
     const p = target(body, ctx);
-    const inst = p.inventory.find((i) => i.ItemId === body.ContainerItemId);
+    const h = holderOf(p, body);
+    const inst = h.inventory.find((i) => i.ItemId === body.ContainerItemId);
     if (!inst) throw fail('ContainerNotOwned', `The player doesn't have a ${body.ContainerItemId}.`);
-    return unlock(p, inst, null, ctx, body.CatalogVersion);
+    return unlock(p, h, inst, null, ctx, body.CatalogVersion);
   };
   const unlockInstance = (body, ctx) => {
-    noCharacters(body);
     const p = target(body, ctx);
-    const inst = p.inventory.find((i) => i.ItemInstanceId === body.ContainerItemInstanceId);
+    const h = holderOf(p, body);
+    const inst = h.inventory.find((i) => i.ItemInstanceId === body.ContainerItemInstanceId);
     if (!inst) throw fail('ContainerNotOwned', "The player doesn't have that container.");
-    const key = body.KeyItemInstanceId ? p.inventory.find((i) => i.ItemInstanceId === body.KeyItemInstanceId) : null;
+    const key = body.KeyItemInstanceId ? h.inventory.find((i) => i.ItemInstanceId === body.KeyItemInstanceId) : null;
     if (body.KeyItemInstanceId && !key) throw fail('KeyNotOwned', "The player doesn't have that key.");
-    return unlock(p, inst, key, ctx, body.CatalogVersion);
+    return unlock(p, h, inst, key, ctx, body.CatalogVersion);
   };
   on('/Client/UnlockContainerItem', unlockItem);
   on('/Server/UnlockContainerItem', unlockItem);
@@ -370,8 +379,9 @@ module.exports = function register(on, app) {
     const t = app.title();
     const version = body.CatalogVersion || t.primaryCatalog || 'Main';
     const items = (body.Catalog || []).map((i) => normaliseItem(i, version));
-    if (merge && t.catalogs[version]) {
-      const byId = new Map(t.catalogs[version].map((i) => [i.ItemId, i]));
+    const existing = own(t.catalogs, version);
+    if (merge && existing) {
+      const byId = new Map(existing.map((i) => [i.ItemId, i]));
       for (const i of items) byId.set(i.ItemId, i);
       t.catalogs[version] = [...byId.values()];
     } else {
@@ -386,7 +396,7 @@ module.exports = function register(on, app) {
 
   const setStore = (merge) => (body) => {
     const t = app.title();
-    const current = t.stores[body.StoreId];
+    const current = own(t.stores, body.StoreId);
     let items = clean(body.Store || []);
     if (merge && current) {
       const byId = new Map(current.items.map((i) => [i.ItemId, i]));
@@ -405,7 +415,7 @@ module.exports = function register(on, app) {
   on('/Admin/UpdateStoreItems', setStore(true));
   on('/Admin/DeleteStore', (body) => {
     const t = app.title();
-    if (!t.stores[body.StoreId]) throw fail('StoreNotFound', `There is no store called ${body.StoreId}.`);
+    if (!own(t.stores, body.StoreId)) throw fail('StoreNotFound', `There is no store called ${body.StoreId}.`);
     delete t.stores[body.StoreId];
     app.saveTitle(t);
     return {};

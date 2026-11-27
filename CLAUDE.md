@@ -39,7 +39,8 @@ Steam tickets and other platform tokens (Apple, Nintendo, Battle.net, OpenID...)
 the player ID is read from them (README says so). Google, Facebook, Xbox, PSN and Twitch sign-ins can't be
 supported that way. CloudScript runs in its own vm context and talks to the server through text only, but
 it isn't a sandbox.
-No characters, matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet.
+No matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet. Characters can't buy items
+(PurchaseItem with a CharacterId says NotImplemented).
 
 ## Tests
 `node tests/run.js` (`--untested` lists handled calls no test tried). Run before pushing.

@@ -23,4 +23,11 @@ function targetPlayer(app, body, ctx) {
   return p;
 }
 
-module.exports = { targetPlayer, takesPlayFabId };
+// Looks a name up in a plain object without finding the names every object
+// has built in, like "constructor", which a request could otherwise send.
+function own(map, key) {
+  if (!map || (typeof key !== 'string' && typeof key !== 'number')) return undefined;
+  return Object.hasOwn(map, key) ? map[key] : undefined;
+}
+
+module.exports = { targetPlayer, takesPlayFabId, own };

@@ -28,6 +28,7 @@ const MODULES = [
   require('./apis/objects'),
   require('./apis/sharedgroups'),
   require('./apis/platforms'), // after auth: it uses app.auth
+  require('./apis/characters'),
 ];
 
 function loadKeys(dir) {

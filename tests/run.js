@@ -692,6 +692,91 @@ test('the economy can be set up through Admin calls', async () => {
   await t.stop();
 });
 
+test('characters: data, statistics, leaderboards, inventory and currency', async () => {
+  const t = await start();
+  const a = await t.player('ch-a');
+  const b = await t.player('ch-b');
+  await t.ok('/Admin/UpdateCatalogItems', { CatalogVersion: 'Main', Catalog: [{ ItemId: 'hero_token', ItemClass: 'Character', CanBecomeCharacter: true, VirtualCurrencyPrices: { GO: 50 } }] }, t.secret);
+
+  // Two ways to get a character.
+  const knight = await t.ok('/Server/GrantCharacterToUser', { PlayFabId: a.id, CharacterName: 'Sir Ida', CharacterType: 'knight' }, t.secret);
+  await t.err('/Client/GrantCharacterToUser', { CharacterName: 'Nope', ItemId: 'hero_token' }, a.auth, 'ItemNotFound');
+  await t.ok('/Client/PurchaseItem', { ItemId: 'hero_token', VirtualCurrency: 'GO', Price: 50 }, a.auth);
+  const hero = await t.ok('/Client/GrantCharacterToUser', { CharacterName: 'Hero', ItemId: 'hero_token' }, a.auth);
+  assert.equal(hero.CharacterType, 'hero_token');
+  assert.equal(hero.Result, true);
+  const mine = await t.ok('/Client/GetAllUsersCharacters', {}, a.auth);
+  assert.deepEqual(mine.Characters.map((c) => c.CharacterName).sort(), ['Hero', 'Sir Ida']);
+  assert.equal((await t.ok('/Client/GetUserInventory', {}, a.auth)).Inventory.length, 0); // the token was used up
+  const knightId = knight.CharacterId;
+
+  // Data: public and private, and server-only kinds.
+  await t.ok('/Client/UpdateCharacterData', { CharacterId: knightId, Data: { armour: 'plate' }, Permission: 'Public' }, a.auth);
+  await t.ok('/Client/UpdateCharacterData', { CharacterId: knightId, Data: { secret: 'x' } }, a.auth);
+  await t.ok('/Server/UpdateCharacterReadOnlyData', { PlayFabId: a.id, CharacterId: knightId, Data: { level: '9' } }, t.secret);
+  await t.ok('/Server/UpdateCharacterInternalData', { PlayFabId: a.id, CharacterId: knightId, Data: { flag: '1' } }, t.secret);
+  const own = await t.ok('/Client/GetCharacterData', { CharacterId: knightId }, a.auth);
+  assert.deepEqual(Object.keys(own.Data).sort(), ['armour', 'secret']);
+  const other = await t.ok('/Client/GetCharacterData', { PlayFabId: a.id, CharacterId: knightId }, b.auth);
+  assert.deepEqual(Object.keys(other.Data), ['armour']);
+  assert.equal((await t.ok('/Client/GetCharacterReadOnlyData', { CharacterId: knightId }, a.auth)).Data.level.Value, '9');
+  assert.equal((await t.ok('/Server/GetCharacterInternalData', { PlayFabId: a.id, CharacterId: knightId }, t.secret)).Data.flag.Value, '1');
+  await t.err('/Client/GetCharacterData', { CharacterId: 'NOPE' }, a.auth, 'CharacterNotFound');
+
+  // Statistics and leaderboards across everyone's characters.
+  const bKnight = await t.ok('/Server/GrantCharacterToUser', { PlayFabId: b.id, CharacterName: 'Dame Bo', CharacterType: 'knight' }, t.secret);
+  await t.ok('/Client/UpdateCharacterStatistics', { CharacterId: knightId, CharacterStatistics: { kills: 10 } }, a.auth);
+  await t.ok('/Client/UpdateCharacterStatistics', { CharacterId: hero.CharacterId, CharacterStatistics: { kills: 30 } }, a.auth);
+  await t.ok('/Server/UpdateCharacterStatistics', { PlayFabId: b.id, CharacterId: bKnight.CharacterId, CharacterStatistics: { kills: 20 } }, t.secret);
+  assert.deepEqual((await t.ok('/Client/GetCharacterStatistics', { CharacterId: knightId }, a.auth)).CharacterStatistics, { kills: 10 });
+  const lb = await t.ok('/Client/GetCharacterLeaderboard', { StatisticName: 'kills', StartPosition: 0, MaxResultsCount: 10 }, a.auth);
+  assert.deepEqual(lb.Leaderboard.map((e) => [e.CharacterName, e.StatValue, e.Position]), [['Hero', 30, 0], ['Dame Bo', 20, 1], ['Sir Ida', 10, 2]]);
+  const knights = await t.ok('/Server/GetCharacterLeaderboard', { StatisticName: 'kills', StartPosition: 0, MaxResultsCount: 10, CharacterType: 'knight' }, t.secret);
+  assert.deepEqual(knights.Leaderboard.map((e) => e.CharacterName), ['Dame Bo', 'Sir Ida']);
+  const near = await t.ok('/Client/GetLeaderboardAroundCharacter', { CharacterId: knightId, StatisticName: 'kills', MaxResultsCount: 1 }, a.auth);
+  assert.deepEqual(near.Leaderboard.map((e) => e.Position), [2]);
+  const ours = await t.ok('/Client/GetLeaderboardForUserCharacters', { StatisticName: 'kills' }, a.auth);
+  assert.deepEqual(ours.Leaderboard.map((e) => [e.CharacterName, e.Position]), [['Hero', 0], ['Sir Ida', 2]]);
+  await t.err('/Client/UpdateCharacterStatistics', { CharacterId: knightId, CharacterStatistics: { kills: 1.5 } }, a.auth, 'InvalidParams');
+  await t.err('/Client/UpdateCharacterStatistics', { CharacterId: knightId, CharacterStatistics: { kills: 2147483648 } }, a.auth, 'InvalidParams');
+
+  // Inventory and currency.
+  const granted = await t.ok('/Server/GrantItemsToCharacter', { PlayFabId: a.id, CharacterId: knightId, ItemIds: ['sword', 'potion', 'crate', 'crate_key'] }, t.secret);
+  assert.ok(granted.ItemGrantResults.every((r) => r.CharacterId === knightId && r.Result));
+  let inv = await t.ok('/Client/GetCharacterInventory', { CharacterId: knightId }, a.auth);
+  assert.equal(inv.Inventory.length, 4);
+  const potion = inv.Inventory.find((i) => i.ItemId === 'potion');
+  await t.ok('/Client/ConsumeItem', { CharacterId: knightId, ItemInstanceId: potion.ItemInstanceId, ConsumeCount: 1 }, a.auth);
+  const opened = await t.ok('/Client/UnlockContainerItem', { CharacterId: knightId, ContainerItemId: 'crate' }, a.auth);
+  assert.deepEqual(opened.GrantedItems.map((i) => i.ItemId), ['potion']);
+  const sword = inv.Inventory.find((i) => i.ItemId === 'sword');
+  await t.ok('/Server/MoveItemToUserFromCharacter', { PlayFabId: a.id, CharacterId: knightId, ItemInstanceId: sword.ItemInstanceId }, t.secret);
+  await t.ok('/Server/MoveItemToCharacterFromUser', { PlayFabId: a.id, CharacterId: hero.CharacterId, ItemInstanceId: sword.ItemInstanceId }, t.secret);
+  await t.ok('/Server/MoveItemToCharacterFromCharacter', { PlayFabId: a.id, GivingCharacterId: hero.CharacterId, ReceivingCharacterId: knightId, ItemInstanceId: sword.ItemInstanceId }, t.secret);
+  const added = await t.ok('/Server/AddCharacterVirtualCurrency', { PlayFabId: a.id, CharacterId: knightId, VirtualCurrency: 'GO', Amount: 30 }, t.secret);
+  assert.deepEqual(added, { Balance: 80, VirtualCurrency: 'GO' }); // 50 from the crate, then 30
+  await t.ok('/Server/SubtractCharacterVirtualCurrency', { PlayFabId: a.id, CharacterId: knightId, VirtualCurrency: 'GO', Amount: 5 }, t.secret);
+  inv = await t.ok('/Server/GetCharacterInventory', { PlayFabId: a.id, CharacterId: knightId }, t.secret);
+  assert.deepEqual(inv.Inventory.map((i) => i.ItemId).sort(), ['potion', 'sword']);
+  assert.equal(inv.VirtualCurrency.GO, 75);
+  await t.err('/Client/PurchaseItem', { CharacterId: knightId, ItemId: 'sword', VirtualCurrency: 'GO', Price: 100 }, a.auth, 'NotImplemented');
+
+  // Combined info lists characters; deleting one can keep its things.
+  const info = await t.ok('/Client/GetPlayerCombinedInfo', { InfoRequestParameters: { GetCharacterList: true, GetCharacterInventories: true } }, a.auth);
+  assert.equal(info.InfoResultPayload.CharacterList.length, 2);
+  await t.ok('/Admin/ResetCharacterStatistics', { PlayFabId: a.id, CharacterId: knightId }, t.secret);
+  assert.deepEqual((await t.ok('/Server/GetCharacterStatistics', { PlayFabId: a.id, CharacterId: knightId }, t.secret)).CharacterStatistics, {});
+  await t.ok('/Server/DeleteCharacterFromUser', { PlayFabId: a.id, CharacterId: knightId, SaveCharacterInventory: true }, t.secret);
+  assert.deepEqual((await t.ok('/Client/GetUserInventory', {}, a.auth)).Inventory.map((i) => i.ItemId).sort(), ['potion', 'sword']);
+  assert.equal((await t.ok('/Server/GetAllUsersCharacters', { PlayFabId: a.id }, t.secret)).Characters.length, 1);
+  await t.ok('/Server/GetCharacterData', { PlayFabId: b.id, CharacterId: bKnight.CharacterId }, t.secret);
+  await t.ok('/Server/GetCharacterReadOnlyData', { PlayFabId: b.id, CharacterId: bKnight.CharacterId }, t.secret);
+  await t.ok('/Server/UpdateCharacterData', { PlayFabId: b.id, CharacterId: bKnight.CharacterId, Data: { x: '1' } }, t.secret);
+  await t.ok('/Server/GetLeaderboardAroundCharacter', { PlayFabId: b.id, CharacterId: bKnight.CharacterId, StatisticName: 'kills', MaxResultsCount: 3 }, t.secret);
+  await t.ok('/Server/GetLeaderboardForUserCharacters', { PlayFabId: b.id, StatisticName: 'kills' }, t.secret);
+  await t.stop();
+});
+
 // ---------------------------------------------------------------- CloudScript
 
 test('CloudScript runs the game\'s own functions', async () => {
@@ -906,8 +991,8 @@ test('events are accepted, and bans stop sign-in', async () => {
 test('calls Keep Playing can\'t answer yet say so, and are counted', async () => {
   const t = await start();
   const p = await t.player('gus');
-  const r = await t.err('/Client/GetCharacterData', { CharacterId: 'x' }, p.auth, 'NotImplemented');
-  assert.match(r.errorMessage, /can't answer \/Client\/GetCharacterData yet/);
+  const r = await t.err('/Client/GetPlayerTrades', {}, p.auth, 'NotImplemented');
+  assert.match(r.errorMessage, /can't answer \/Client\/GetPlayerTrades yet/);
   assert.equal(r.code, 501);
   const retired = await t.err('/Client/GetCloudScriptUrl', {}, p.auth, 'NotImplemented');
   assert.match(retired.errorMessage, /Microsoft retired/);
@@ -915,7 +1000,7 @@ test('calls Keep Playing can\'t answer yet say so, and are counted', async () =>
   assert.equal(unknown.status, 404);
   const status = await t.raw('GET', '/');
   assert.equal(status.json.name, 'Keep Playing');
-  assert.equal(status.json.seen['/Client/GetCharacterData'].lastError, 'NotImplemented');
+  assert.equal(status.json.seen['/Client/GetPlayerTrades'].lastError, 'NotImplemented');
   assert.equal(status.json.calls.total, 797);
   await t.stop();
 });
@@ -1194,6 +1279,27 @@ test('"__proto__" keys are refused, and made-up addresses aren\'t counted', asyn
   for (let i = 0; i < 5; i++) await t.raw('POST', `/Client/Nope${i}`, { body: {} });
   const status = await t.raw('GET', '/status');
   assert.equal(Object.keys(status.json.seen).some((u) => u.includes('Nope')), false);
+  await t.stop();
+});
+
+test('names every object has built in, like "constructor", are just names', async () => {
+  const t = await start();
+  const p = await t.player('nina');
+  await t.err('/Client/GetStoreItems', { StoreId: 'constructor' }, p.auth, 'StoreNotFound');
+  await t.err('/Admin/DeleteStore', { StoreId: 'toString' }, t.secret, 'StoreNotFound');
+  assert.deepEqual((await t.ok('/Client/GetCatalogItems', { CatalogVersion: 'hasOwnProperty' }, p.auth)).Catalog, []);
+  await t.err('/Client/GetCharacterData', { CharacterId: 'constructor' }, p.auth, 'CharacterNotFound');
+  await t.err('/Client/ConsumeItem', { CharacterId: 'valueOf', ItemInstanceId: 'x', ConsumeCount: 1 }, p.auth, 'CharacterNotFound');
+  await t.err('/Admin/IncrementPlayerStatisticVersion', { StatisticName: 'constructor' }, t.secret, 'StatisticNotFound');
+  await t.err('/Admin/UpdatePlayerStatisticDefinition', { StatisticName: 'toString', AggregationMethod: 'Max' }, t.secret, 'StatisticNotFound');
+  await t.ok('/Client/UpdatePlayerStatistics', { Statistics: [{ StatisticName: 'constructor', Value: 7 }] }, p.auth);
+  const stats = await t.ok('/Client/GetPlayerStatistics', { StatisticNames: ['constructor'] }, p.auth);
+  assert.deepEqual(stats.Statistics.map((s) => [s.StatisticName, s.Value]), [['constructor', 7]]);
+  const lb = await t.ok('/Client/GetLeaderboard', { StatisticName: 'constructor', StartPosition: 0, MaxResultsCount: 5 }, p.auth);
+  assert.deepEqual(lb.Leaderboard.map((e) => e.StatValue), [7]);
+  await t.ok('/Client/UpdateUserData', { Data: { toString: 'fine' } }, p.auth);
+  assert.equal((await t.ok('/Client/GetUserData', { Keys: ['toString', 'valueOf'] }, p.auth)).Data.toString.Value, 'fine');
+  assert.equal(typeof Object.version, 'undefined');
   await t.stop();
 });
 

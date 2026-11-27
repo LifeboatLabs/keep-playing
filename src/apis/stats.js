@@ -2,7 +2,7 @@
 // Player statistics and the classic leaderboards built from them.
 
 const { fail } = require('../errors');
-const { targetPlayer } = require('./common');
+const { targetPlayer, own } = require('./common');
 const { profile } = require('../players');
 
 const INT32_MAX = 2147483647;
@@ -43,7 +43,7 @@ const MAX_HISTORY = 1000;
 
 function definition(app, name, now, create) {
   const t = app.title();
-  let def = t.statistics[name];
+  let def = own(t.statistics, name);
   let changed = false;
   if (!def) {
     if (!create) return null;
@@ -101,7 +101,7 @@ function update(app, p, updates, now) {
     if (u.Version !== undefined && u.Version !== null && u.Version !== def.version) {
       throw fail('StatisticVersionClosedForWrites', `Version ${u.Version} of ${u.StatisticName} is closed; the current version is ${def.version}.`);
     }
-    const old = p.stats[u.StatisticName];
+    const old = own(p.stats, u.StatisticName);
     const current = old && old.version === def.version ? old.value : null;
     let value = u.Value;
     if (current !== null) {
@@ -125,7 +125,7 @@ module.exports = function register(on, app) {
     const v = version === undefined || version === null ? (def ? def.version : 0) : version;
     const rows = [];
     for (const p of among || app.players.all()) {
-      const s = p.stats[name];
+      const s = own(p.stats, name);
       if (s && s.version === v) rows.push({ p, value: s.value, at: s.updated });
     }
     rows.sort((a, b) => b.value - a.value || (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
@@ -236,7 +236,7 @@ module.exports = function register(on, app) {
   });
   on('/Admin/CreatePlayerStatisticDefinition', (body, ctx) => {
     const t = app.title();
-    if (t.statistics[body.StatisticName]) throw fail('StatisticNameConflict', `There is already a statistic called ${body.StatisticName}.`);
+    if (own(t.statistics, body.StatisticName)) throw fail('StatisticNameConflict', `There is already a statistic called ${body.StatisticName}.`);
     t.statistics[body.StatisticName] = {
       aggregation: body.AggregationMethod || 'Last',
       resetInterval: body.VersionChangeInterval || 'Never',
@@ -248,7 +248,7 @@ module.exports = function register(on, app) {
   });
   on('/Admin/UpdatePlayerStatisticDefinition', (body, ctx) => {
     const t = app.title();
-    const def = t.statistics[body.StatisticName];
+    const def = own(t.statistics, body.StatisticName);
     if (!def) throw fail('StatisticNotFound', `There is no statistic called ${body.StatisticName}.`);
     if (body.AggregationMethod) def.aggregation = body.AggregationMethod;
     if (body.VersionChangeInterval) def.resetInterval = body.VersionChangeInterval;
@@ -262,7 +262,7 @@ module.exports = function register(on, app) {
     const def = definition(app, body.StatisticName, ctx.now, false);
     if (!def) throw fail('StatisticNotFound', `There is no statistic called ${body.StatisticName}.`);
     const t = app.title();
-    const d = t.statistics[body.StatisticName];
+    const d = own(t.statistics, body.StatisticName);
     const at = ctx.now.toISOString();
     d.versions[d.versions.length - 1].deactivated = at;
     d.version += 1;

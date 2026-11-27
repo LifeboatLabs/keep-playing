@@ -277,13 +277,6 @@ module.exports = function register(on, app) {
     }
     return {};
   };
-  // Characters aren't supported yet, so every player has none.
-  on('/Client/GetAllUsersCharacters', () => ({ Characters: [] }));
-  on('/Server/GetAllUsersCharacters', (body, ctx) => {
-    target(body, ctx);
-    return { Characters: [] };
-  });
-
   on('/Server/DeletePlayer', deletePlayer);
   on('/Admin/DeletePlayer', deletePlayer);
 };

@@ -31,8 +31,9 @@ function combinedInfo(app, p, params, ctx, isSelf) {
     out.UserVirtualCurrency = vc.balances;
     out.UserVirtualCurrencyRechargeTimes = vc.recharge;
   }
-  if (params.GetCharacterList) out.CharacterList = [];
-  if (params.GetCharacterInventories) out.CharacterInventories = [];
+  const characters = Object.values(p.characters || {});
+  if (params.GetCharacterList) out.CharacterList = characters.map((c) => ({ CharacterId: c.id, CharacterName: c.name, CharacterType: c.type }));
+  if (params.GetCharacterInventories) out.CharacterInventories = characters.map((c) => ({ CharacterId: c.id, Inventory: economy.inventory(c) }));
   return out;
 }
 
