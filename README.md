@@ -124,7 +124,7 @@ Keep Playing is for games whose official servers are gone, or for studios planni
 - **Players bring their own copy.** This project never shares game files.
 - **No unlocking things people didn't pay for**, no cheats, and no getting around copy protection.
 
-Pointing a finished game at a new address can be fiddly. It's a job for the game's own studio, or for modders who know that game. We'll write up how to do it safely.
+Pointing a finished game at a new address can be fiddly. It's a job for the game's own studio, or for modders who know that game. [Trying a game with Keep Playing](docs/testing-a-game.md) explains how, step by step.
 
 ## For studios: an end-of-life plan
 
