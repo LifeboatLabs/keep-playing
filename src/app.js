@@ -26,6 +26,7 @@ const MODULES = [
   require('./apis/cloudscript'),
   require('./apis/events'),
   require('./apis/objects'),
+  require('./apis/sharedgroups'),
 ];
 
 function loadKeys(dir) {

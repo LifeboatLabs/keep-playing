@@ -728,6 +728,41 @@ test('entity objects: players change their own, version checks work', async () =
   await t.stop();
 });
 
+test('shared groups: members share data, others see only what\'s public', async () => {
+  const t = await start();
+  const a = await t.player('sg-a');
+  const b = await t.player('sg-b');
+  const c = await t.player('sg-c');
+  const made = await t.ok('/Client/CreateSharedGroup', { SharedGroupId: 'base-42' }, a.auth);
+  assert.equal(made.SharedGroupId, 'base-42');
+  await t.err('/Client/CreateSharedGroup', { SharedGroupId: 'base-42' }, b.auth, 'InvalidSharedGroupId');
+  await t.ok('/Client/UpdateSharedGroupData', { SharedGroupId: 'base-42', Data: { walls: '3', plan: 'secret' } }, a.auth);
+  await t.ok('/Client/UpdateSharedGroupData', { SharedGroupId: 'base-42', Data: { banner: 'red' }, Permission: 'Public' }, a.auth);
+  await t.err('/Client/UpdateSharedGroupData', { SharedGroupId: 'base-42', Data: { walls: '0' } }, b.auth, 'NotAuthorized');
+  const outside = await t.ok('/Client/GetSharedGroupData', { SharedGroupId: 'base-42', GetMembers: true }, b.auth);
+  assert.deepEqual(Object.keys(outside.Data), ['banner']);
+  assert.deepEqual(outside.Members, [a.id]);
+  await t.ok('/Client/AddSharedGroupMembers', { SharedGroupId: 'base-42', PlayFabIds: [b.id] }, a.auth);
+  const inside = await t.ok('/Client/GetSharedGroupData', { SharedGroupId: 'base-42', Keys: ['walls', 'plan'] }, b.auth);
+  assert.equal(inside.Data.walls.Value, '3');
+  assert.equal(inside.Data.walls.LastUpdatedBy, a.id);
+  await t.ok('/Client/UpdateSharedGroupData', { SharedGroupId: 'base-42', KeysToRemove: ['plan'] }, b.auth);
+  await t.err('/Client/AddSharedGroupMembers', { SharedGroupId: 'base-42', PlayFabIds: [c.id] }, c.auth, 'NotAuthorized');
+  // When the last member leaves, the group goes.
+  await t.ok('/Client/RemoveSharedGroupMembers', { SharedGroupId: 'base-42', PlayFabIds: [a.id, b.id] }, a.auth);
+  await t.err('/Client/GetSharedGroupData', { SharedGroupId: 'base-42' }, a.auth, 'InvalidSharedGroupId');
+  // The server can run groups that have no members.
+  const s = await t.ok('/Server/CreateSharedGroup', {}, t.secret);
+  assert.match(s.SharedGroupId, /^[0-9A-F]{16}$/);
+  await t.ok('/Server/UpdateSharedGroupData', { SharedGroupId: s.SharedGroupId, Data: { round: '1' } }, t.secret);
+  await t.ok('/Server/AddSharedGroupMembers', { SharedGroupId: s.SharedGroupId, PlayFabIds: [c.id] }, t.secret);
+  assert.equal((await t.ok('/Server/GetSharedGroupData', { SharedGroupId: s.SharedGroupId, GetMembers: true }, t.secret)).Members[0], c.id);
+  await t.ok('/Server/RemoveSharedGroupMembers', { SharedGroupId: s.SharedGroupId, PlayFabIds: [] }, t.secret);
+  await t.ok('/Server/DeleteSharedGroup', { SharedGroupId: s.SharedGroupId }, t.secret);
+  await t.err('/Server/GetSharedGroupData', { SharedGroupId: s.SharedGroupId }, t.secret, 'InvalidSharedGroupId');
+  await t.stop();
+});
+
 // ---------------------------------------------------------------- friends, events, odds and ends
 
 test('friends and friend leaderboards', async () => {
@@ -766,8 +801,8 @@ test('events are accepted, and bans stop sign-in', async () => {
 test('calls Keep Playing can\'t answer yet say so, and are counted', async () => {
   const t = await start();
   const p = await t.player('gus');
-  const r = await t.err('/Client/GetSharedGroupData', { SharedGroupId: 'x' }, p.auth, 'NotImplemented');
-  assert.match(r.errorMessage, /can't answer \/Client\/GetSharedGroupData yet/);
+  const r = await t.err('/Client/GetCharacterData', { CharacterId: 'x' }, p.auth, 'NotImplemented');
+  assert.match(r.errorMessage, /can't answer \/Client\/GetCharacterData yet/);
   assert.equal(r.code, 501);
   const retired = await t.err('/Client/GetCloudScriptUrl', {}, p.auth, 'NotImplemented');
   assert.match(retired.errorMessage, /Microsoft retired/);
@@ -775,7 +810,7 @@ test('calls Keep Playing can\'t answer yet say so, and are counted', async () =>
   assert.equal(unknown.status, 404);
   const status = await t.raw('GET', '/');
   assert.equal(status.json.name, 'Keep Playing');
-  assert.equal(status.json.seen['/Client/GetSharedGroupData'].lastError, 'NotImplemented');
+  assert.equal(status.json.seen['/Client/GetCharacterData'].lastError, 'NotImplemented');
   assert.equal(status.json.calls.total, 797);
   await t.stop();
 });

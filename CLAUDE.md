@@ -36,7 +36,7 @@ cheats, no getting around copy protection. Never send anything to a server of ou
 
 ## Known gaps
 Steam ticket signatures aren't checked (README says so). CloudScript's vm context isn't a sandbox.
-No shared groups, characters, matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet.
+No characters, matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet.
 
 ## Tests
 `node tests/run.js` (`--untested` lists handled calls no test tried). Run before pushing.
