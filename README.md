@@ -11,7 +11,7 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 
 ## Where it's up to
 
-This is an early version (0.1).
+This is an early version (0.2).
 
 - **It answers 353 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
 - **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check over 700 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
@@ -160,12 +160,14 @@ In GitHub Actions:
     node-version: 22
 - name: Start Keep Playing
   run: |
-    git clone --depth 1 https://github.com/LifeboatLabs/keep-playing "$RUNNER_TEMP/keep-playing"
+    git clone --depth 1 --branch v0.2.0 https://github.com/LifeboatLabs/keep-playing "$RUNNER_TEMP/keep-playing"
     node "$RUNNER_TEMP/keep-playing/server.js" --title ./playfab-title --data "$RUNNER_TEMP/playfab-data" &
     until curl -sf http://localhost:8080/status > /dev/null; do sleep 0.2; done
 - name: Test
   run: npm test # with the PlayFab SDK pointed at http://localhost:8080
 ```
+
+`--branch v0.2.0` keeps your tests on one version of Keep Playing. Change it when you want a newer one: the [releases](https://github.com/LifeboatLabs/keep-playing/releases) page lists them.
 
 ## What works
 
