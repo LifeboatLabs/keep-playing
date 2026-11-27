@@ -9,11 +9,13 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const https = require('node:https');
 const zlib = require('node:zlib');
 const crypto = require('node:crypto');
 
 const { createApp } = require('../src/app');
 const spec = require('../src/spec');
+const tlsCert = require('../src/tls');
 
 const ROOT = path.join(__dirname, '..');
 const EXAMPLE = path.join(ROOT, 'title-example');
@@ -999,6 +1001,48 @@ test('entity files: upload, finalise, download, and only the owner changes them'
   t.clock.now = new Date(t.clock.now.getTime() + 25 * 60 * 60 * 1000);
   assert.equal((await fetch(tf.Metadata['levels.json'].DownloadUrl)).status, 403);
   await t.stop();
+});
+
+test("https: Keep Playing's own certificate works, and only for this computer", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-tls-'));
+  const now = new Date('2026-11-27T10:00:00Z');
+  const first = tlsCert.loadOrCreate(dir, now);
+  assert.equal(first.made, true);
+  assert.equal(tlsCert.loadOrCreate(dir, now).made, false); // kept for next time
+  const x = new crypto.X509Certificate(first.cert);
+  assert.equal(x.ca, false); // it can't vouch for any other website
+  assert.equal(x.subjectAltName, 'DNS:localhost, IP Address:127.0.0.1, IP Address:0:0:0:0:0:0:0:1');
+  assert.ok(x.verify(x.publicKey));
+  if (process.platform !== 'win32') assert.equal(fs.statSync(path.join(dir, 'keep-playing.key')).mode & 0o777, 0o600);
+  const renewed = tlsCert.loadOrCreate(dir, new Date(Date.parse(x.validTo) - 10 * 24 * 60 * 60 * 1000));
+  assert.equal(renewed.made, true); // under a month left
+
+  // A game that trusts it signs in over https, and the file addresses it's given are https too.
+  // (TLS checks dates by the real clock, so this one is made now.)
+  const live = tlsCert.makeCertificate();
+  const app = createApp({ now: () => now, titleDir: EXAMPLE });
+  const server = https.createServer({ cert: live.cert, key: live.key }, (req, res) => app.handle(req, res));
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const post = (host, url, body, headers = {}, ca = live.cert) => new Promise((resolve) => {
+    const payload = Buffer.from(JSON.stringify(body));
+    const req = https.request({ host: '127.0.0.1', port: server.address().port, path: url, method: 'POST', ca, servername: host === '127.0.0.1' ? undefined : host,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': payload.length, Host: `${host}:${server.address().port}`, ...headers } }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, json: JSON.parse(Buffer.concat(chunks).toString()) }));
+    });
+    req.on('error', (e) => resolve({ error: e.code }));
+    req.end(payload);
+  });
+  const login = await post('localhost', '/Client/LoginWithCustomID', { TitleId: '1A2B3', CustomId: 'secure', CreateAccount: true });
+  assert.equal(login.status, 200, JSON.stringify(login));
+  const entity = { 'X-EntityToken': login.json.data.EntityToken.EntityToken };
+  const up = await post('127.0.0.1', '/File/InitiateFileUploads', { Entity: login.json.data.EntityToken.Entity, FileNames: ['a.sav'] }, entity);
+  assert.match(up.json.data.UploadDetails[0].UploadUrl, /^https:\/\/127\.0\.0\.1:\d+\/files\//);
+  assert.equal((await post('localhost', '/Client/GetTime', {}, {}, null)).error, 'DEPTH_ZERO_SELF_SIGNED_CERT'); // not trusted: refused
+  server.close();
+  app.close();
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('groups: roles, applications, invitations, blocks and members', async () => {

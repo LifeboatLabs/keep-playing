@@ -17,29 +17,34 @@ These are the calls HW12Dev's emulator answers. Keep Playing answers all of them
 
 ## Running it
 
-1. Start Keep Playing with this folder:
+1. Start Keep Playing with this folder. The game only connects over https, so add `--https`:
 
    ```
-   node server.js --title games/otwd
+   node server.js --title games/otwd --https
    ```
 
-2. The game only connects over HTTPS, so Keep Playing needs an HTTPS address. The simplest way is a free [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/):
+   Keep Playing makes a certificate for this computer and listens at `https://127.0.0.1:8443`.
 
-   ```
-   cloudflared tunnel --url http://localhost:8080
-   ```
-
-   It prints an address like `something.trycloudflare.com`.
-
-3. Open `%localappdata%\OTWD\Saved\Config\WindowsNoEditor\Engine.ini`, and add this to the end (with your own address):
+2. Open `%localappdata%\OTWD\Saved\Config\WindowsNoEditor\Engine.ini`, and add this to the end:
 
    ```ini
    [/Script/PlayFab.PlayFabRuntimeSettings]
    TitleId=
-   ProductionEnvironmentURL=something.trycloudflare.com
+   ProductionEnvironmentURL=127.0.0.1:8443
+
+   [/Script/Engine.NetworkSettings]
+   n.VerifyPeer=False
    ```
 
-   This is how HW12Dev's emulator connects too. To go back, remove those lines.
+   The first part sends the game's PlayFab calls to Keep Playing. This is how HW12Dev's emulator connects too. The second part lets the game accept Keep Playing's certificate. It also stops the game checking certificates anywhere else, which is fine for a game whose servers are gone. To go back, remove those lines.
+
+### Another way: a tunnel
+
+If you'd rather not change the certificate setting, a free [Cloudflare quick tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/) gives Keep Playing an https address with a certificate the game already trusts. Your game's calls then go through Cloudflare.
+
+1. Start Keep Playing without `--https`: `node server.js --title games/otwd`
+2. Run `cloudflared tunnel --url http://localhost:8080`. It prints an address like `something.trycloudflare.com`.
+3. In `Engine.ini`, add only the first part above, with `ProductionEnvironmentURL=something.trycloudflare.com`.
 
 ## Settings in title.json
 

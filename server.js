@@ -5,13 +5,17 @@
 //   node server.js                      players saved in ./data, port 8080
 //   node server.js --title ./my-game    load the game's settings from a folder
 //   node server.js --port 9000 --data ./saves --verbose
+//   node server.js --https              for games that only use https (port 8443)
 
+const fs = require('node:fs');
 const http = require('node:http');
+const https = require('node:https');
 const path = require('node:path');
 const { createApp } = require('./src/app');
+const tls = require('./src/tls');
 
 function args(argv) {
-  const out = { port: 8080, host: '127.0.0.1', data: 'data', title: null, verbose: false };
+  const out = { port: null, host: '127.0.0.1', data: 'data', title: null, verbose: false, https: false, cert: null, key: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -23,22 +27,32 @@ function args(argv) {
     else if (a === '--data') out.data = next();
     else if (a === '--title') out.title = next();
     else if (a === '--verbose') out.verbose = true;
+    else if (a === '--https') out.https = true;
+    else if (a === '--cert') out.cert = next();
+    else if (a === '--key') out.key = next();
     else if (a === '--help' || a === '-h') out.help = true;
     else throw new Error(`I don't know the option ${a}. Try --help.`);
   }
+  if (!out.cert !== !out.key) throw new Error('--cert and --key go together: give both, or neither.');
+  if (out.cert) out.https = true;
+  if (out.port === null) out.port = out.https ? 8443 : 8080;
   if (!Number.isInteger(out.port) || out.port < 1 || out.port > 65535) throw new Error('--port should be a number from 1 to 65535');
   return out;
 }
 
 const HELP = `Keep Playing: a free server that answers PlayFab calls.
 
-  node server.js [--title FOLDER] [--data FOLDER] [--port 8080] [--host 127.0.0.1] [--verbose]
+  node server.js [--title FOLDER] [--data FOLDER] [--port 8080] [--host 127.0.0.1] [--https] [--verbose]
 
   --title    the game's settings (title data, catalog, CloudScript...). See title-example/.
   --data     where players are saved. Default: ./data
-  --port     the port to listen on. Default: 8080
+  --port     the port to listen on. Default: 8080, or 8443 with --https
   --host     who can connect. 127.0.0.1 means only this computer (the default).
              Use 0.0.0.0 to let other computers on your network connect.
+  --https    use https, for games that won't use plain http (most Unreal games).
+             Keep Playing makes a certificate for this computer and keeps it in
+             the data folder. See "Games that need https" in README.md.
+  --cert, --key   use your own certificate and key (PEM files) for https instead.
   --verbose  show every call as it happens.
 `;
 
@@ -73,13 +87,26 @@ function main() {
     process.exit(1);
   }
 
-  const server = http.createServer((req, res) => {
+  let certificate = null;
+  if (opts.https) {
+    try {
+      certificate = opts.cert
+        ? { cert: fs.readFileSync(opts.cert, 'utf8'), key: fs.readFileSync(opts.key, 'utf8'), certFile: path.resolve(opts.cert), own: true }
+        : tls.loadOrCreate(path.join(path.resolve(opts.data), 'tls'));
+    } catch (e) {
+      console.error(`Keep Playing couldn't set up https: ${e.message}`);
+      process.exit(1);
+    }
+  }
+  const handler = (req, res) => {
     app.handle(req, res).catch((e) => {
       log(`Unexpected problem: ${e.stack || e}`, 'error');
       if (!res.headersSent) res.writeHead(500);
       res.end();
     });
-  });
+  };
+  const server = certificate ? https.createServer({ cert: certificate.cert, key: certificate.key }, handler) : http.createServer(handler);
+  const scheme = certificate ? 'https' : 'http';
   server.keepAliveTimeout = 65000;
 
   server.on('error', (e) => {
@@ -91,15 +118,19 @@ function main() {
   server.listen(opts.port, opts.host, () => {
     // For addresses made where there's no request to go by (inside CloudScript).
     const local = opts.host === '0.0.0.0' || opts.host === '::' ? '127.0.0.1' : opts.host.includes(':') ? `[${opts.host}]` : opts.host;
-    app.publicUrl = `http://${local}:${opts.port}`;
+    app.publicUrl = `${scheme}://${local}:${opts.port}`;
     const s = app.status();
     const t = app.title();
-    console.log(`Keep Playing ${app.version} is running at http://${opts.host === '0.0.0.0' ? 'localhost' : opts.host}:${opts.port}`);
+    console.log(`Keep Playing ${app.version} is running at ${scheme}://${opts.host === '0.0.0.0' ? 'localhost' : opts.host}:${opts.port}`);
     console.log(`  Game: ${t.name || '(no name)'}, title ID ${t.titleId || '(set by the first sign-in)'}`);
     console.log(`  Players saved in ${path.resolve(opts.data)} (${s.players} so far)`);
     console.log(`  Answers ${s.calls.working} of ${s.calls.total} PlayFab calls`);
     console.log(`  Secret key for Server and Admin calls is in ${path.join(path.resolve(opts.data), 'keys.json')}`);
     if (opts.host === '0.0.0.0') console.log('  Other computers on your network can connect.');
+    if (certificate && !certificate.own) {
+      console.log(`  Certificate: ${certificate.certFile}${certificate.made ? ' (just made)' : ''}`);
+      console.log('  Games will only accept it once you trust it. See "Games that need https" in README.md.');
+    }
     console.log('Press Ctrl+C to stop.');
   });
 

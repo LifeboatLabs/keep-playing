@@ -5,7 +5,9 @@ working after their online services shut down. Part of Lifeboat Labs (https://li
 same family as Done With To Do, Done With Windows 10 and Save Your Game. Not affiliated with Microsoft.
 
 ## Files
-- `server.js`: the command line (`--title`, `--data`, `--port`, `--host`, `--verbose`).
+- `server.js`: the command line (`--title`, `--data`, `--port`, `--host`, `--https`, `--cert`/`--key`, `--verbose`).
+- `src/tls.js`: makes a self-signed, not-a-CA certificate for localhost/127.0.0.1/::1 (plain DER, Node crypto only)
+  and keeps it in `<data>/tls/`, renewed with under 30 days left.
 - `src/app.js`: HTTP side, auth (X-Authorization / X-SecretKey / X-EntityToken), envelopes, `app.run()`.
 - `src/spec.js`: loads `spec/calls.json` and checks requests and answers against it.
 - `src/store.js`: in-memory records plus an append-only journal and snapshot in the data folder.

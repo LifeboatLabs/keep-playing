@@ -55,6 +55,30 @@ Every PlayFab SDK lets you change the address it calls. If the address starts wi
 
 Game servers and tools that use the Server or Admin calls need the secret key. Keep Playing makes one the first time it starts and keeps it in `data/keys.json`.
 
+### Games that need https
+
+Some games only talk to `https` addresses. Most Unreal games are like this, because PlayFab's Unreal plugin only uses https. Start Keep Playing with `--https`:
+
+```
+node server.js --https
+```
+
+Keep Playing makes a certificate for this computer, keeps it in `data/tls/keep-playing.crt`, and listens at `https://127.0.0.1:8443`. Point the game at that address.
+
+The game will only accept the certificate once it trusts it. There are two ways to do that:
+
+- **Trust it in Windows.** Double-click `keep-playing.crt`, click **Install Certificate**, choose **Current User**, then **Place all certificates in the following store**. Click **Browse**, pick **Trusted Root Certification Authorities**, and click **OK**, **Next** and **Finish**. Say **Yes** to the warning. The certificate only covers this computer's own addresses (`localhost` and `127.0.0.1`) and can't vouch for any other website. To remove it later, open **certmgr.msc** and delete "Keep Playing on this computer" from Trusted Root Certification Authorities.
+- **Unreal games that still say no.** Many Unreal games keep their own list of trusted certificates instead of using Windows'. You can tell such a game to stop checking certificates by adding these lines to its `Engine.ini` (usually in `%localappdata%\<game>\Saved\Config\WindowsNoEditor`):
+
+  ```ini
+  [/Script/Engine.NetworkSettings]
+  n.VerifyPeer=False
+  ```
+
+  The game then stops checking every secure connection it makes, not just the ones to Keep Playing. Only do this for a game whose servers are gone, and remove the lines if they ever come back.
+
+To use a certificate of your own instead, start Keep Playing with `--cert yourcert.pem --key yourkey.pem`.
+
 ## Your game's settings
 
 Put the game's settings in a folder and start the server with `--title that-folder`. [title-example](title-example) shows every file. They're all optional:
