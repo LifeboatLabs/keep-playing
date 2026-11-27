@@ -1241,7 +1241,21 @@ test('calls Keep Playing can\'t answer yet say so, and are counted', async () =>
   const status = await t.raw('GET', '/');
   assert.equal(status.json.name, 'Keep Playing');
   assert.equal(status.json.seen['/Client/GetPlayerTrades'].lastError, 'NotImplemented');
+  assert.equal(status.json.seen['/Client/GetPlayerTrades'].notAnswered, 1);
   assert.equal(status.json.calls.total, 797);
+
+  // A browser gets a page instead, with a report link that lists what's missing.
+  const page = await t.raw('GET', '/', { headers: { Accept: 'text/html,application/xhtml+xml' } });
+  assert.equal(page.status, 200);
+  assert.match(page.headers['content-type'], /^text\/html/);
+  assert.match(page.headers['content-security-policy'], /default-src 'none'; style-src 'sha256-/);
+  assert.match(page.text, /Example game/);
+  assert.match(page.text, /<td class="call">\/Client\/GetPlayerTrades<\/td>/);
+  const link = page.text.match(/href="(https:\/\/github\.com\/LifeboatLabs\/keep-playing\/issues\/new\?[^"]+)"/);
+  assert.ok(link, 'the page should have a report link');
+  const body = new URL(link[1].replace(/&amp;/g, '&')).searchParams.get('body');
+  assert.match(body, /- \/Client\/GetPlayerTrades \(1 time\)/);
+  assert.match(body, /Game: Example game/);
   await t.stop();
 });
 

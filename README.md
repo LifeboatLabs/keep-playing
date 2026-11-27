@@ -38,9 +38,11 @@ One shared, open replacement means a shutdown doesn't have to be the end. Studio
    curl -X POST http://localhost:8080/Client/LoginWithCustomID -H "Content-Type: application/json" -d "{\"TitleId\":\"1A2B3\",\"CustomId\":\"me\",\"CreateAccount\":true}"
    ```
 
-Open http://localhost:8080 in a browser to see how many players there are and which calls the game has made. Keep Playing also prints a note for each call it can't answer yet, so you can see straight away what your game needs.
+Open http://localhost:8080 in a browser to see what's going on: how many players there are, each call the game has made, and which ones Keep Playing can't answer yet. If there are any, the **Report on GitHub** button opens a report with them filled in, so you can tell us what your game needs. Nothing is sent until you post it.
 
-Options: `--port 9000`, `--data ./saves` (where players are kept, `./data` by default), `--verbose` (show every call), and `--host 0.0.0.0` (let other computers on your network connect; by default only your own computer can).
+![Keep Playing's page in a browser, listing the calls a game has made and one it can't answer yet](docs/status-page.png)
+
+Options: `--port 9000`, `--data ./saves` (where players are kept, `./data` by default), `--verbose` (show every call), `--https` (for games that only use https; see [Games that need https](#games-that-need-https)), and `--host 0.0.0.0` (let other computers on your network connect; by default only your own computer can).
 
 ## Point your game at it
 

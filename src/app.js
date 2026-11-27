@@ -8,6 +8,7 @@ const crypto = require('node:crypto');
 const zlib = require('node:zlib');
 
 const spec = require('./spec');
+const { statusPage } = require('./page');
 const { ApiError, fail, STATUS_TEXT } = require('./errors');
 const { Store } = require('./store');
 const { Players, isBanned } = require('./players');
@@ -203,10 +204,11 @@ function createApp(options = {}) {
   }
 
   function note(url, result) {
-    const s = app.seen.get(url) || { count: 0, answered: 0, lastError: null };
+    const s = app.seen.get(url) || { count: 0, answered: 0, notAnswered: 0, lastError: null };
     s.count++;
     if (result === true) s.answered++;
     else s.lastError = result;
+    if (result === 'NotImplemented') s.notAnswered++;
     app.seen.set(url, s);
   }
 
@@ -257,6 +259,19 @@ function createApp(options = {}) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, CORS);
       return res.end();
+    }
+    // A browser gets a page saying what's going on; anything else gets the same as JSON.
+    if (req.method === 'GET' && url === '/' && /text\/html/.test(String(req.headers.accept || ''))) {
+      const { html, csp } = statusPage(app.status(), app.title(), originOf(req));
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': Buffer.byteLength(html),
+        'Content-Security-Policy': csp,
+        'X-Content-Type-Options': 'nosniff',
+        'Referrer-Policy': 'no-referrer',
+        'Cache-Control': 'no-store',
+      });
+      return res.end(html);
     }
     if (req.method === 'GET' && (url === '/' || url === '/status')) {
       return send(res, 200, app.status());

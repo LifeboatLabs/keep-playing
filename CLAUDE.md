@@ -9,6 +9,8 @@ same family as Done With To Do, Done With Windows 10 and Save Your Game. Not aff
 - `src/tls.js`: makes a self-signed, not-a-CA certificate for localhost/127.0.0.1/::1 (plain DER, Node crypto only)
   and keeps it in `<data>/tls/`, renewed with under 30 days left.
 - `src/app.js`: HTTP side, auth (X-Authorization / X-SecretKey / X-EntityToken), envelopes, `app.run()`.
+- `src/page.js`: the page a browser gets at `/` (calls seen, a prefilled GitHub report link for unanswered ones).
+  Strict CSP with a hash for its one style block, no scripts; `/status` and non-browser `/` stay JSON.
 - `src/spec.js`: loads `spec/calls.json` and checks requests and answers against it.
 - `src/store.js`: in-memory records plus an append-only journal and snapshot in the data folder.
 - `src/players.js`, `src/title.js`, `src/tokens.js`, `src/errors.js`: accounts, the title folder, signed tickets, errors.
