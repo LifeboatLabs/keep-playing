@@ -12,8 +12,19 @@ const KINDS = {
   IOSDeviceId: 'IOS',
   Steam: 'Steam',
   ServerCustomId: 'ServerCustomId',
+  Apple: 'Apple',
+  GameCenter: 'GameCenter',
+  Kongregate: 'Kongregate',
+  NintendoSwitchDeviceId: 'NintendoSwitchDeviceId',
+  NintendoServiceAccount: 'NintendoSwitchAccount',
+  FacebookInstantGames: 'FacebookInstantGamesId',
+  BattleNet: 'BattleNet',
   Username: 'Organic',
 };
+
+// OpenID Connect links are kept per connection: kind "OpenId:<ConnectionId>",
+// value "<issuer>\n<subject>".
+const originOf = (kind) => KINDS[kind] || (kind && kind.startsWith('OpenId:') ? 'OpenIdConnect' : 'Organic');
 
 // A player is banned while any ban is active and hasn't run out.
 function isBanned(p, now = new Date()) {
@@ -89,7 +100,7 @@ class Players {
       created: at,
       firstLogin: at,
       lastLogin: null,
-      origination: KINDS[kind] || 'Organic',
+      origination: originOf(kind),
       displayName: null,
       username: null,
       email: null,
@@ -189,12 +200,36 @@ function accountInfo(p) {
   if (p.links.AndroidDeviceId !== undefined) info.AndroidDeviceInfo = { AndroidDeviceId: p.links.AndroidDeviceId };
   if (p.links.IOSDeviceId !== undefined) info.IosDeviceInfo = { IosDeviceId: p.links.IOSDeviceId };
   if (p.links.Steam !== undefined) info.SteamInfo = { SteamId: p.links.Steam };
+  if (p.links.Apple !== undefined) info.AppleAccountInfo = { AppleSubjectId: p.links.Apple };
+  if (p.links.GameCenter !== undefined) info.GameCenterInfo = { GameCenterId: p.links.GameCenter };
+  if (p.links.Kongregate !== undefined) info.KongregateInfo = { KongregateId: p.links.Kongregate };
+  if (p.links.NintendoSwitchDeviceId !== undefined) info.NintendoSwitchDeviceIdInfo = { NintendoSwitchDeviceId: p.links.NintendoSwitchDeviceId };
+  if (p.links.NintendoServiceAccount !== undefined) info.NintendoSwitchAccountInfo = { NintendoSwitchAccountSubjectId: p.links.NintendoServiceAccount };
+  if (p.links.FacebookInstantGames !== undefined) info.FacebookInstantGamesIdInfo = { FacebookInstantGamesId: p.links.FacebookInstantGames };
+  if (p.links.BattleNet !== undefined) info.BattleNetAccountInfo = { BattleNetAccountId: p.links.BattleNet };
+  const openIds = Object.entries(p.links).filter(([k]) => k.startsWith('OpenId:'));
+  if (openIds.length) {
+    info.OpenIdInfo = openIds.map(([k, v]) => {
+      const [Issuer, Subject] = v.split('\n');
+      return { ConnectionId: k.slice('OpenId:'.length), Issuer, Subject };
+    });
+  }
   return info;
 }
 
-const LINKED_PLATFORM = { CustomId: 'Custom', AndroidDeviceId: 'AndroidDevice', IOSDeviceId: 'IOSDevice', Steam: 'Steam' };
+const LINKED_PLATFORM = {
+  CustomId: 'Custom', AndroidDeviceId: 'AndroidDevice', IOSDeviceId: 'IOSDevice', Steam: 'Steam',
+  ServerCustomId: 'CustomServer', Apple: 'Apple', GameCenter: 'GameCenter', Kongregate: 'Kongregate',
+  NintendoSwitchDeviceId: 'NintendoSwitch', NintendoServiceAccount: 'NintendoSwitchAccount',
+  FacebookInstantGames: 'FacebookInstantGames', BattleNet: 'BattleNet',
+};
 // UserOrigination names (account info) to LoginIdentityProvider names (profiles).
-const PROVIDER = { Organic: 'PlayFab', CustomId: 'Custom', Android: 'AndroidDevice', IOS: 'IOSDevice', Steam: 'Steam' };
+const PROVIDER = {
+  Organic: 'PlayFab', CustomId: 'Custom', Android: 'AndroidDevice', IOS: 'IOSDevice', Steam: 'Steam',
+  ServerCustomId: 'CustomServer', Apple: 'Apple', GameCenter: 'GameCenter', Kongregate: 'Kongregate',
+  NintendoSwitchDeviceId: 'NintendoSwitch', NintendoSwitchAccount: 'NintendoSwitchAccount',
+  FacebookInstantGamesId: 'FacebookInstantGames', BattleNet: 'BattleNet', OpenIdConnect: 'OpenIdConnect',
+};
 
 // PlayFab returns DisplayName, PlayerId, PublisherId and TitleId unless asked for more.
 function profile(p, title, constraints) {
@@ -213,7 +248,11 @@ function profile(p, title, constraints) {
     out.ContactEmailAddresses = [{ EmailAddress: p.contactEmail, Name: 'Primary', VerificationStatus: 'Unverified' }];
   }
   if (c.ShowLinkedAccounts) {
-    out.LinkedAccounts = Object.entries(p.links).map(([kind, id]) => ({ Platform: LINKED_PLATFORM[kind] || 'Custom', PlatformUserId: id }));
+    out.LinkedAccounts = Object.entries(p.links)
+      .filter(([kind]) => !kind.startsWith('Generic:'))
+      .map(([kind, id]) => (kind.startsWith('OpenId:')
+        ? { Platform: 'OpenIdConnect', PlatformUserId: id.split('\n')[1] }
+        : { Platform: LINKED_PLATFORM[kind] || 'Custom', PlatformUserId: id }));
     if (p.username || p.email) out.LinkedAccounts.push({ Platform: 'PlayFab', Username: p.username || undefined, Email: p.email || undefined });
   }
   return out;

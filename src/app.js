@@ -27,6 +27,7 @@ const MODULES = [
   require('./apis/events'),
   require('./apis/objects'),
   require('./apis/sharedgroups'),
+  require('./apis/platforms'), // after auth: it uses app.auth
 ];
 
 function loadKeys(dir) {

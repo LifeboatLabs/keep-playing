@@ -89,6 +89,9 @@ module.exports = function register(on, app) {
     return String(v);
   };
 
+  // Shared with platforms.js, which adds the other sign-in kinds.
+  app.auth = { signInWith, field, entityTokenFor };
+
   const steamTicket = (body) => {
     const id = steamIdFromTicket(body.SteamTicket);
     if (!id) throw fail('InvalidSteamTicket', 'That Steam ticket could not be read.');

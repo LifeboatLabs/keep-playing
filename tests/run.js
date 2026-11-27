@@ -383,6 +383,111 @@ test('passes the checks Microsoft\'s JavaScript SDK test page makes', async () =
   await t.stop();
 });
 
+test('other sign-ins: Apple, Game Center, Nintendo, Battle.net, Kongregate, Instant Games, OpenID', async () => {
+  const t = await start();
+  const jwt = (claims) => ['{"alg":"RS256"}', JSON.stringify(claims), 'sig'].map((x, i) => (i < 2 ? Buffer.from(x).toString('base64url') : x)).join('.');
+  const login = async (url, body) => t.ok(url, { TitleId: '1A2B3', CreateAccount: true, ...body });
+
+  const apple = await login('/Client/LoginWithApple', { IdentityToken: jwt({ sub: 'apple-user-1', iss: 'https://appleid.apple.com' }) });
+  const appleAgain = await t.ok('/Client/LoginWithApple', { TitleId: '1A2B3', IdentityToken: jwt({ sub: 'apple-user-1', iat: 2 }) });
+  assert.equal(appleAgain.PlayFabId, apple.PlayFabId);
+  const auth = { 'X-Authorization': apple.SessionTicket };
+  const info = await t.ok('/Client/GetAccountInfo', {}, auth);
+  assert.equal(info.AccountInfo.AppleAccountInfo.AppleSubjectId, 'apple-user-1');
+  assert.equal(info.AccountInfo.TitleInfo.Origination, 'Apple');
+  await t.err('/Client/LoginWithApple', { TitleId: '1A2B3', IdentityToken: 'not-a-token', CreateAccount: true }, {}, 'InvalidParams');
+
+  // Link several more to the same account, then sign in with each.
+  await t.ok('/Client/LinkGameCenterAccount', { GameCenterId: 'G:123' }, auth);
+  await t.ok('/Client/LinkKongregate', { KongregateId: 'kong-9', AuthTicket: 'x' }, auth);
+  await t.ok('/Client/LinkNintendoSwitchDeviceId', { NintendoSwitchDeviceId: 'switch-1' }, auth);
+  await t.ok('/Client/LinkNintendoServiceAccount', { IdentityToken: jwt({ sub: 'na-77' }) }, auth);
+  await t.ok('/Client/LinkBattleNetAccount', { IdentityToken: jwt({ sub: 'bnet-5' }) }, auth);
+  const fbPayload = Buffer.from(JSON.stringify({ player_id: 'fbig-3', algorithm: 'HMAC-SHA256' })).toString('base64url');
+  await t.ok('/Client/LinkFacebookInstantGamesId', { FacebookInstantGamesSignature: `sig.${fbPayload}` }, auth);
+  await t.ok('/Client/LinkOpenIdConnect', { ConnectionId: 'mysite', IdToken: jwt({ sub: 'oid-1', iss: 'https://id.example.com' }) }, auth);
+  for (const [url, body] of [
+    ['/Client/LoginWithGameCenter', { PlayerId: 'G:123' }],
+    ['/Client/LoginWithKongregate', { KongregateId: 'kong-9', AuthTicket: 'x' }],
+    ['/Client/LoginWithNintendoSwitchDeviceId', { NintendoSwitchDeviceId: 'switch-1' }],
+    ['/Client/LoginWithNintendoServiceAccount', { IdentityToken: jwt({ sub: 'na-77' }) }],
+    ['/Client/LoginWithBattleNet', { IdentityToken: jwt({ sub: 'bnet-5' }) }],
+    ['/Client/LoginWithFacebookInstantGamesId', { FacebookInstantGamesSignature: `other.${fbPayload}` }],
+    ['/Client/LoginWithOpenIdConnect', { ConnectionId: 'mysite', IdToken: jwt({ sub: 'oid-1', iss: 'https://id.example.com' }) }],
+  ]) {
+    const r = await t.ok(url, { TitleId: '1A2B3', ...body });
+    assert.equal(r.PlayFabId, apple.PlayFabId, url);
+  }
+  const all = await t.ok('/Client/GetAccountInfo', {}, auth);
+  assert.equal(all.AccountInfo.GameCenterInfo.GameCenterId, 'G:123');
+  assert.equal(all.AccountInfo.NintendoSwitchAccountInfo.NintendoSwitchAccountSubjectId, 'na-77');
+  assert.deepEqual(all.AccountInfo.OpenIdInfo, [{ ConnectionId: 'mysite', Issuer: 'https://id.example.com', Subject: 'oid-1' }]);
+  const profile = await t.ok('/Client/GetPlayerProfile', { ProfileConstraints: { ShowLinkedAccounts: true, ShowOrigination: true } }, auth);
+  assert.equal(profile.PlayerProfile.Origination, 'Apple');
+  assert.ok(profile.PlayerProfile.LinkedAccounts.some((l) => l.Platform === 'OpenIdConnect' && l.PlatformUserId === 'oid-1'));
+
+  // Lookups, from the client and the server.
+  const gc = await t.ok('/Client/GetPlayFabIDsFromGameCenterIDs', { GameCenterIDs: ['G:123', 'G:999'] }, auth);
+  assert.deepEqual(gc.Data, [{ GameCenterId: 'G:123', PlayFabId: apple.PlayFabId }, { GameCenterId: 'G:999' }]);
+  const oid = await t.ok('/Server/GetPlayFabIDsFromOpenIdSubjectIdentifiers', { OpenIdSubjectIdentifiers: [{ Issuer: 'https://id.example.com', Subject: 'oid-1' }] }, t.secret);
+  assert.equal(oid.Data[0].PlayFabId, apple.PlayFabId);
+  for (const [url, field, id] of [
+    ['/Client/GetPlayFabIDsFromKongregateIDs', 'KongregateIDs', 'kong-9'],
+    ['/Server/GetPlayFabIDsFromNintendoSwitchDeviceIds', 'NintendoSwitchDeviceIds', 'switch-1'],
+    ['/Server/GetPlayFabIDsFromNintendoServiceAccountIds', 'NintendoAccountIds', 'na-77'],
+    ['/Server/GetPlayFabIDsFromFacebookInstantGamesIds', 'FacebookInstantGamesIds', 'fbig-3'],
+    ['/Server/GetPlayFabIDsFromBattleNetAccountIds', 'BattleNetAccountIds', 'bnet-5'],
+  ]) {
+    const r = await t.ok(url, { [field]: [id] }, url.startsWith('/Server') ? t.secret : auth);
+    assert.equal(r.Data[0].PlayFabId, apple.PlayFabId, url);
+  }
+
+  // Unlinking, from the client and the server.
+  await t.ok('/Client/UnlinkOpenIdConnect', { ConnectionId: 'mysite' }, auth);
+  await t.ok('/Server/UnlinkGameCenterAccount', { PlayFabId: apple.PlayFabId }, t.secret);
+  await t.err('/Client/LoginWithGameCenter', { TitleId: '1A2B3', PlayerId: 'G:123' }, {}, 'AccountNotFound');
+  const server = await t.ok('/Server/LoginWithBattleNet', { IdentityToken: jwt({ sub: 'bnet-5' }) }, t.secret);
+  assert.equal(server.PlayFabId, apple.PlayFabId);
+  await t.ok('/Server/LinkNintendoServiceAccountSubject', { PlayFabId: apple.PlayFabId, Subject: 'na-88', ForceLink: true }, t.secret);
+  await t.ok('/Server/UnlinkNintendoServiceAccount', { PlayFabId: apple.PlayFabId }, t.secret);
+  await t.stop();
+});
+
+test('generic IDs, custom properties, segments and reports', async () => {
+  const t = await start();
+  const a = await t.player('gp-a');
+  const b = await t.player('gp-b');
+  await t.ok('/Client/AddGenericID', { GenericId: { ServiceName: 'OldForum', UserId: 'user-42' } }, a.auth);
+  await t.err('/Client/AddGenericID', { GenericId: { ServiceName: 'OldForum', UserId: 'user-42' } }, b.auth, 'LinkedAccountAlreadyClaimed');
+  const found = await t.ok('/Server/GetPlayFabIDsFromGenericIDs', { GenericIDs: [{ ServiceName: 'OldForum', UserId: 'user-42' }] }, t.secret);
+  assert.equal(found.Data[0].PlayFabId, a.id);
+  await t.ok('/Client/RemoveGenericID', { GenericId: { ServiceName: 'OldForum', UserId: 'user-42' } }, a.auth);
+  await t.ok('/Server/AddGenericID', { PlayFabId: b.id, GenericId: { ServiceName: 'OldForum', UserId: 'user-42' } }, t.secret);
+
+  const v1 = await t.ok('/Client/UpdatePlayerCustomProperties', { Properties: [{ Name: 'region', Value: 'eu' }, { Name: 'level', Value: 7 }] }, a.auth);
+  assert.equal(v1.PropertiesVersion, 1);
+  await t.err('/Client/UpdatePlayerCustomProperties', { Properties: [{ Name: 'x', Value: 1 }], ExpectedPropertiesVersion: 0 }, a.auth, 'PlayerCustomPropertiesVersionMismatch');
+  await t.err('/Client/UpdatePlayerCustomProperties', { Properties: [{ Name: 'bad name', Value: 1 }] }, a.auth, 'PlayerCustomPropertiesPropertyNameIsInvalid');
+  await t.err('/Client/UpdatePlayerCustomProperties', { Properties: [{ Name: 'obj', Value: { no: 1 } }] }, a.auth, 'PlayerCustomPropertiesValueIsInvalidType');
+  const one = await t.ok('/Client/GetPlayerCustomProperty', { PropertyName: 'level' }, a.auth);
+  assert.deepEqual(one.Property, { Name: 'level', Value: 7 });
+  await t.err('/Client/GetPlayerCustomProperty', { PropertyName: 'nope' }, a.auth, 'PlayerCustomPropertiesPropertyDoesNotExist');
+  const list = await t.ok('/Server/ListPlayerCustomProperties', { PlayFabId: a.id }, t.secret);
+  assert.equal(list.Properties.length, 2);
+  const del = await t.ok('/Admin/DeletePlayerCustomProperties', { PlayFabId: a.id, PropertyNames: ['region', 'nope'] }, t.secret);
+  assert.deepEqual(del.DeletedProperties, [{ Name: 'region', WasDeleted: true }, { Name: 'nope', WasDeleted: false }]);
+  assert.equal(del.PropertiesVersion, 2);
+
+  assert.deepEqual((await t.ok('/Client/GetPlayerSegments', {}, a.auth)).Segments, []);
+  for (let i = 4; i >= 0; i--) assert.equal((await t.ok('/Client/ReportPlayer', { ReporteeId: b.id }, a.auth)).SubmissionsRemaining, i);
+  assert.deepEqual(await t.ok('/Client/ReportPlayer', { ReporteeId: b.id }, a.auth), { SubmissionsRemaining: 0, Updated: false });
+  await t.ok('/Server/ReportPlayer', { ReporterId: b.id, ReporteeId: a.id, Comment: 'test' }, t.secret);
+  await t.ok('/Client/GetAdPlacements', { AppId: 'app' }, a.auth);
+  await t.ok('/Client/AndroidDevicePushNotificationRegistration', { DeviceToken: 'tok' }, a.auth);
+  await t.ok('/Client/RegisterForIOSPushNotification', { DeviceToken: 'tok' }, a.auth);
+  await t.stop();
+});
+
 // ---------------------------------------------------------------- data
 
 test('player data: save, read, remove, versions and privacy', async () => {
@@ -852,6 +957,7 @@ test('every call Keep Playing answers gives an answer that matches the descripti
   const steam = Buffer.alloc(52);
   steam.writeUInt32LE(20, 0);
   steam.writeBigUInt64LE(76561197960287999n, 12);
+  const jwt = (claims) => ['{"alg":"RS256"}', JSON.stringify(claims)].map((x) => Buffer.from(x).toString('base64url')).join('.') + '.sig';
   const titleToken = { 'X-EntityToken': (await t.ok('/Authentication/GetEntityToken', {}, t.secret)).EntityToken };
 
   await t.ok('/Server/UpdatePlayerStatistics', { PlayFabId: A.id, Statistics: [{ StatisticName: 'HighScore', Value: 50 }] }, t.secret);
@@ -981,6 +1087,49 @@ test('every call Keep Playing answers gives an answer that matches the descripti
     ['/Server/DeletePlayer', { PlayFabId: D.id }],
     ['/Admin/DeletePlayer', { PlayFabId: E.id }],
     ['/Admin/RemoveVirtualCurrencyTypes', { VirtualCurrencies: [{ CurrencyCode: 'GE' }] }],
+    // Other sign-in kinds: link, look up, unlink.
+    ['/Client/LinkApple', { IdentityToken: jwt({ sub: 'smoke-apple' }) }],
+    ['/Client/UnlinkApple', {}],
+    ['/Client/LinkApple', { IdentityToken: jwt({ sub: 'smoke-apple' }) }],
+    ['/Server/UnlinkApple', { PlayFabId: A.id }],
+    ['/Client/LinkGameCenterAccount', { GameCenterId: 'smoke-gc' }],
+    ['/Client/UnlinkGameCenterAccount', {}],
+    ['/Client/LinkKongregate', { KongregateId: 'smoke-kong', AuthTicket: 't' }],
+    ['/Client/UnlinkKongregate', {}],
+    ['/Server/LinkNintendoSwitchDeviceId', { PlayFabId: A.id, NintendoSwitchDeviceId: 'smoke-switch' }],
+    ['/Client/GetPlayFabIDsFromNintendoSwitchDeviceIds', { NintendoSwitchDeviceIds: ['smoke-switch'] }],
+    ['/Client/UnlinkNintendoSwitchDeviceId', {}],
+    ['/Client/LinkNintendoSwitchDeviceId', { NintendoSwitchDeviceId: 'smoke-switch' }],
+    ['/Server/UnlinkNintendoSwitchDeviceId', { PlayFabId: A.id }],
+    ['/Server/LinkNintendoServiceAccount', { PlayFabId: A.id, IdentityToken: jwt({ sub: 'smoke-na' }) }],
+    ['/Client/GetPlayFabIDsFromNintendoServiceAccountIds', { NintendoAccountIds: ['smoke-na'] }],
+    ['/Client/UnlinkNintendoServiceAccount', {}],
+    ['/Server/LoginWithNintendoServiceAccount', { IdentityToken: jwt({ sub: 'smoke-na-2' }), CreateAccount: true }],
+    ['/Client/LinkFacebookInstantGamesId', { FacebookInstantGamesSignature: `s.${Buffer.from('{"player_id":"smoke-fb"}').toString('base64url')}` }],
+    ['/Client/GetPlayFabIDsFromFacebookInstantGamesIds', { FacebookInstantGamesIds: ['smoke-fb'] }],
+    ['/Client/UnlinkFacebookInstantGamesId', {}],
+    ['/Client/LinkFacebookInstantGamesId', { FacebookInstantGamesSignature: `s.${Buffer.from('{"player_id":"smoke-fb"}').toString('base64url')}` }],
+    ['/Server/UnlinkFacebookInstantGamesId', { PlayFabId: A.id }],
+    ['/Server/LinkBattleNetAccount', { PlayFabId: A.id, IdentityToken: jwt({ sub: 'smoke-bnet' }) }],
+    ['/Client/GetPlayFabIDsFromBattleNetAccountIds', { BattleNetAccountIds: ['smoke-bnet'] }],
+    ['/Client/UnlinkBattleNetAccount', {}],
+    ['/Client/LinkBattleNetAccount', { IdentityToken: jwt({ sub: 'smoke-bnet' }) }],
+    ['/Server/UnlinkBattleNetAccount', { PlayFabId: A.id }],
+    ['/Client/GetPlayFabIDsFromOpenIdSubjectIdentifiers', { OpenIdSubjectIdentifiers: [{ Issuer: 'https://x', Subject: 'y' }] }],
+    ['/Server/AddGenericID', { PlayFabId: A.id, GenericId: { ServiceName: 'Smoke', UserId: 'u1' } }],
+    ['/Client/GetPlayFabIDsFromGenericIDs', { GenericIDs: [{ ServiceName: 'Smoke', UserId: 'u1' }] }],
+    ['/Server/RemoveGenericID', { PlayFabId: A.id, GenericId: { ServiceName: 'Smoke', UserId: 'u1' } }],
+    // Custom properties and segments, from every side.
+    ['/Server/UpdatePlayerCustomProperties', { PlayFabId: A.id, Properties: [{ Name: 'a', Value: 'x' }] }],
+    ['/Admin/UpdatePlayerCustomProperties', { PlayFabId: A.id, Properties: [{ Name: 'b', Value: true }] }],
+    ['/Server/GetPlayerCustomProperty', { PlayFabId: A.id, PropertyName: 'a' }],
+    ['/Admin/GetPlayerCustomProperty', { PlayFabId: A.id, PropertyName: 'b' }],
+    ['/Client/ListPlayerCustomProperties', {}],
+    ['/Admin/ListPlayerCustomProperties', { PlayFabId: A.id }],
+    ['/Client/DeletePlayerCustomProperties', { PropertyNames: ['a'] }],
+    ['/Server/DeletePlayerCustomProperties', { PlayFabId: A.id, PropertyNames: ['b'] }],
+    ['/Server/GetPlayerSegments', { PlayFabId: A.id }],
+    ['/Admin/GetPlayerSegments', { PlayFabId: A.id }],
   ];
   // The user data calls, every kind, for Server and Admin.
   for (const api of ['Server', 'Admin']) {

@@ -13,7 +13,7 @@ It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing
 
 This is an early version (0.1).
 
-- **It answers 205 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
+- **It answers 279 of the 797 calls** that Microsoft still lists. [COVERAGE.md](COVERAGE.md) lists which ones.
 - **Every answer is checked against Microsoft's own description** of that call: the field names, the types, the required fields and the allowed values. The tests check almost 400 answers this way, and they try every call that Keep Playing answers. They also make the same checks as the test page in Microsoft's own JavaScript SDK.
 - **It hasn't been tried with a real game yet.** If you make games or mods with PlayFab, please try it and [tell us what broke](https://github.com/LifeboatLabs/keep-playing/issues).
 
@@ -85,10 +85,10 @@ Switches in `title.json` → `settings`:
 
 ## What works
 
-- **Signing in**: custom IDs, Android and iOS device IDs, usernames and email addresses with passwords, Steam, and server custom IDs. Also linking, unlinking, session tickets and entity tokens.
+- **Signing in**: custom IDs, Android and iOS device IDs, usernames and email addresses with passwords, Steam, Apple, Game Center, Nintendo (Switch device and Nintendo account), Battle.net, Kongregate, Facebook Instant Games, OpenID Connect and server custom IDs. Also linking, unlinking, looking players up by any of these, session tickets and entity tokens.
 - **Player data**: player data of every kind (normal, read-only, internal and publisher), with public and private keys and data versions.
 - **Title data**: title data, internal title data and publisher data.
-- **Accounts**: account info, profiles, combined info, display names, avatars, contact emails, tags and bans.
+- **Accounts**: account info, profiles, combined info, display names, avatars, contact emails, tags, bans, custom properties and generic IDs.
 - **Friends**: friends, friend tags and friend leaderboards.
 - **Shared groups**: small groups of players who share data, with public and private keys.
 - **Statistics**: player statistics with Last, Min, Max and Sum, and hourly, daily, weekly and monthly resets. Also classic leaderboards, including the leaderboard around a player.
@@ -106,9 +106,10 @@ These are the big gaps, roughly in the order we'll work on them:
 - the newer economy (Catalog and Inventory), the newer leaderboards and statistics, and groups;
 - entity files and CloudScript that runs on Azure Functions;
 - multiplayer servers and Party;
-- drop tables, web requests from CloudScript, and push notifications.
+- drop tables, web requests from CloudScript, and push notifications;
+- signing in with Google, Facebook, Xbox, PlayStation or Twitch. Their tokens can only be checked by those companies, so there's no player ID to read from them.
 
-**Steam sign-in doesn't check Valve's signature yet.** Keep Playing reads the Steam ID from the ticket, which is fine on your own computer. Don't run a public server with Steam sign-in until the signature is checked.
+**Sign-ins aren't checked with Valve, Apple, Nintendo and the others.** Keep Playing reads the player's ID from what the game sends, which is fine on your own computer. Don't run a public server with these sign-ins until they're checked.
 
 ## Games
 

@@ -7,6 +7,7 @@
 // CloudScript you trust, because it runs with the server's permissions.
 
 const vm = require('node:vm');
+const util = require('node:util');
 const spec = require('../spec');
 const { ApiError, fail } = require('../errors');
 const { profile } = require('../players');
@@ -16,6 +17,14 @@ const MAX_RESULT_BYTES = 1024 * 1024;
 const MAX_LOG_BYTES = 350 * 1024;
 
 const clone = (v) => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+
+// Node's time-limit error. Checked without touching getters or proxies, so a
+// value a script throws can't run code here.
+function isTimeLimit(e) {
+  if (e === null || typeof e !== 'object' || util.types.isProxy(e)) return false;
+  const d = Object.getOwnPropertyDescriptor(e, 'code');
+  return !!d && 'value' in d && d.value === 'ERR_SCRIPT_EXECUTION_TIMEOUT';
+}
 
 // Entity API names (GetObjects, SetObjects, ...) to their addresses.
 function entityApiMap() {
@@ -227,7 +236,7 @@ module.exports = function register(on, app) {
       scriptFor(rev).runInContext(context, { timeout, displayErrors: false });
       loaded = true;
     } catch (e) {
-      error = timedOut() ? timeLimit : { Error: 'JavascriptException', Message: 'JavascriptException', StackTrace: describe(e) };
+      error = isTimeLimit(e) || timedOut() ? timeLimit : { Error: 'JavascriptException', Message: 'JavascriptException', StackTrace: describe(e) };
     }
     if (loaded) {
       context.__kpName = functionName;
@@ -237,7 +246,7 @@ module.exports = function register(on, app) {
       try {
         outcome = JSON.parse(callHandler.runInContext(context, { timeout, displayErrors: false }));
       } catch (e) {
-        error = timedOut() ? timeLimit : { Error: 'JavascriptException', Message: 'JavascriptException', StackTrace: 'An error that could not be shown' };
+        error = isTimeLimit(e) || timedOut() ? timeLimit : { Error: 'JavascriptException', Message: 'JavascriptException', StackTrace: 'An error that could not be shown' };
       }
       if (outcome && outcome.missing) {
         error = { Error: 'CloudScriptNotFound', Message: `No function named ${functionName} was found to execute`, StackTrace: '' };

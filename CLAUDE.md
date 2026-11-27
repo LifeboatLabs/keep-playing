@@ -35,7 +35,10 @@ their own copy; never share game files. No unlocking paid content for people who
 cheats, no getting around copy protection. Never send anything to a server of ours; there isn't one.
 
 ## Known gaps
-Steam ticket signatures aren't checked (README says so). CloudScript's vm context isn't a sandbox.
+Steam tickets and other platform tokens (Apple, Nintendo, Battle.net, OpenID...) aren't checked with the platform;
+the player ID is read from them (README says so). Google, Facebook, Xbox, PSN and Twitch sign-ins can't be
+supported that way. CloudScript runs in its own vm context and talks to the server through text only, but
+it isn't a sandbox.
 No characters, matchmaking, lobbies, Economy v2, groups, files or Azure Functions yet.
 
 ## Tests
