@@ -160,14 +160,14 @@ In GitHub Actions:
     node-version: 22
 - name: Start Keep Playing
   run: |
-    git clone --depth 1 --branch v0.2.0 https://github.com/LifeboatLabs/keep-playing "$RUNNER_TEMP/keep-playing"
+    git clone --depth 1 https://github.com/LifeboatLabs/keep-playing "$RUNNER_TEMP/keep-playing"
     node "$RUNNER_TEMP/keep-playing/server.js" --title ./playfab-title --data "$RUNNER_TEMP/playfab-data" &
     until curl -sf http://localhost:8080/status > /dev/null; do sleep 0.2; done
 - name: Test
   run: npm test # with the PlayFab SDK pointed at http://localhost:8080
 ```
 
-`--branch v0.2.0` keeps your tests on one version of Keep Playing. Change it when you want a newer one: the [releases](https://github.com/LifeboatLabs/keep-playing/releases) page lists them.
+To keep your tests on one version of Keep Playing, add `--branch` and a version's tag (like `--branch v0.2.0`) to the `git clone` line. The [releases](https://github.com/LifeboatLabs/keep-playing/releases) page lists them.
 
 ## What works
 
