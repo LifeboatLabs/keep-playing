@@ -2,8 +2,9 @@
 
 **A free, open-source server that answers PlayFab calls.** PlayFab is the Microsoft service that many games use for sign-ins, saves, shops, leaderboards and server-side scripts. Keep Playing runs on your own computer and answers those calls itself, so you can:
 
-- **test a game offline** without touching your live PlayFab title, or using up the 1,000 players PlayFab's free Development Mode allows ([for developers](#for-developers-test-without-playfab));
-- **give players a way to keep playing** when a game's online services shut down.
+- **give players a way to keep playing** when a game's online services shut down;
+- **bring players back** from their saved data, so their characters and items return with the game ([how](#bring-a-player-back));
+- **test a game offline** without touching your live PlayFab title, or using up the 1,000 players PlayFab's free Development Mode allows ([for developers](#for-developers-test-without-playfab)).
 
 It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing to install from npm and no database to set up.
 
@@ -229,6 +230,33 @@ If your game uses PlayFab, closing it can look like this:
    It asks for the secret key in the `PLAYFAB_SECRET_KEY` environment variable (or `--secret-key`). It only reads, and it only talks to your own title. It saves title data, internal title data, catalogs (`--catalog` for each one beyond the primary), stores (`--store` for each one, because PlayFab has no call that lists them), currencies, statistics, the live CloudScript and news. Player accounts aren't included.
 2. **Ship a last update** that lets players change the server address, or points at a community server.
 3. **Hand players Keep Playing and the folder.** `node server.js --title ./my-game` brings it all back. The tests check that a saved title comes back exactly as it was.
+4. **Give each player their own player file** (see [Bring a player back](#bring-a-player-back)), so their account comes back too.
+
+## Bring a player back
+
+Keep Playing can bring back a player's account from a **player file**: what PlayFab's `GetPlayerCombinedInfo` answered for that player. It brings back their name, player data, items, currencies, statistics and characters. They keep their PlayFab ID and their sign-ins, so when they sign in the way they always did, the game finds them again.
+
+To bring someone back, put their player file in the `import` folder inside Keep Playing's `data` folder, then start Keep Playing. It says who it brought back, and moves the file into `import/done`. (Or start it with `--import their-file.json`.) A player who's already there is left alone, so starting it again doesn't change anything. If they've already played on this server under the same sign-in, that sign-in moves to the account that was brought back.
+
+**For studios:** before you switch PlayFab off, call `Server/GetPlayerCombinedInfo` for each player with everything turned on, and save each answer as it is:
+
+```json
+{
+  "PlayFabId": "THE PLAYER'S ID",
+  "InfoRequestParameters": {
+    "GetUserAccountInfo": true, "GetUserData": true, "GetUserReadOnlyData": true,
+    "GetUserInventory": true, "GetUserVirtualCurrency": true, "GetPlayerStatistics": true,
+    "GetCharacterList": true, "GetCharacterInventories": true, "GetPlayerProfile": true,
+    "ProfileConstraints": { "ShowDisplayName": true, "ShowLinkedAccounts": true }
+  }
+}
+```
+
+A player file is personal data. Give each player only their own file, the way you'd answer a data request, and never publish them together.
+
+**For players:** if you asked a game company for your data (with [Save Your Game](https://lifeboatlabs.github.io/save-your-game/), say), it may not come back in this shape. We don't know yet what companies send. If yours came back, please [tell us what it looks like](https://github.com/LifeboatLabs/keep-playing/issues/new?template=game-report.md): just the kinds of files and the names of the fields, with none of your details. Then Keep Playing can learn to read it.
+
+What doesn't come back: passwords (PlayFab never gives them out, so a player who signed in with a username and password needs another way in), internal player data, friends, and character data beyond each character's name, type and items.
 
 ## Safety
 

@@ -14,6 +14,9 @@ same family as Done With To Do, Done With Windows 10 and Save Your Game. Not aff
 - `src/spec.js`: loads `spec/calls.json` and checks requests and answers against it.
 - `src/store.js`: in-memory records plus an append-only journal and snapshot in the data folder.
 - `src/players.js`, `src/title.js`, `src/tokens.js`, `src/errors.js`: accounts, the title folder, signed tickets, errors.
+- `src/import.js`: brings players back from player files (GetPlayerCombinedInfo answers) at start: `--import FILE` and
+  `<data>/import/*.json` (moved to `import/done`). Keeps PlayFab ID, entity ID and sign-ins; a sign-in owned by a player
+  made here moves; an existing PlayFab ID is left alone. Item instances keep only ItemInstance fields.
 - `src/apis/*.js`: the calls, one area per file. Register with `on(url, (body, ctx) => result)`.
 - `src/apis/files.js`: entity files. Games upload and download at signed `/files/` addresses (not PlayFab
   calls, answered like Azure storage); contents go in `<data>/files/`, or memory without a data folder.

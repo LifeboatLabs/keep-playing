@@ -14,9 +14,10 @@ const https = require('node:https');
 const path = require('node:path');
 const { createApp } = require('./src/app');
 const tls = require('./src/tls');
+const { importFile, importFolder, describe } = require('./src/import');
 
 function args(argv) {
-  const out = { port: null, host: '127.0.0.1', data: 'data', title: null, verbose: false, https: false, cert: null, key: null, addresses: [] };
+  const out = { port: null, host: '127.0.0.1', data: 'data', title: null, verbose: false, https: false, cert: null, key: null, addresses: [], imports: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -31,6 +32,7 @@ function args(argv) {
     else if (a === '--https') out.https = true;
     else if (a === '--cert') out.cert = next();
     else if (a === '--key') out.key = next();
+    else if (a === '--import') out.imports.push(next());
     else if (a === '--title-id') out.addresses.push(...next().split(',').map((id) => tls.playfabAddress(id.trim())));
     else if (a === '--help' || a === '-h') out.help = true;
     else throw new Error(`I don't know the option ${a}. Try --help.`);
@@ -45,7 +47,7 @@ function args(argv) {
 
 const HELP = `Keep Playing: a free server that answers PlayFab calls.
 
-  node server.js [--title FOLDER] [--data FOLDER] [--port 8080] [--host 127.0.0.1] [--https] [--title-id 1A2B3] [--verbose]
+  node server.js [--title FOLDER] [--data FOLDER] [--port 8080] [--host 127.0.0.1] [--https] [--title-id 1A2B3] [--import FILE] [--verbose]
 
   --title    the game's settings (title data, catalog, CloudScript...). See title-example/.
   --data     where players are saved. Default: ./data
@@ -56,6 +58,9 @@ const HELP = `Keep Playing: a free server that answers PlayFab calls.
              Keep Playing makes a certificate for this computer and keeps it in
              the data folder. See "Games that need https" in README.md.
   --cert, --key   use your own certificate and key (PEM files) for https instead.
+  --import FILE   bring back a player from a player file (what PlayFab's
+             GetPlayerCombinedInfo answered for them). Files put in the
+             import folder inside the data folder are brought back too.
   --title-id 1A2B3   answer the game's calls to 1a2b3.playfabapi.com: https on
              port 443, with a certificate that covers that address too. The hosts
              file has to send the address here, and Windows has to trust the
@@ -94,6 +99,27 @@ function main() {
     console.error(`Keep Playing couldn't start: ${e.message}`);
     process.exit(1);
   }
+
+  // Players to bring back: files named with --import, and files in data/import.
+  const importDir = path.join(path.resolve(opts.data), 'import');
+  const found = { results: [], errors: [] };
+  for (const f of opts.imports) {
+    try {
+      found.results.push(importFile(app, path.resolve(f)));
+    } catch (e) {
+      found.errors.push(e.message);
+    }
+  }
+  try {
+    fs.mkdirSync(importDir, { recursive: true });
+    const inFolder = importFolder(app, importDir);
+    found.results.push(...inFolder.results);
+    found.errors.push(...inFolder.errors);
+  } catch (e) {
+    found.errors.push(`couldn't look in ${importDir}: ${e.message}`);
+  }
+  for (const r of found.results) console.log(describe(r));
+  for (const e of found.errors) console.error(`Couldn't bring back a player: ${e}`);
 
   let certificate = null;
   if (opts.https) {

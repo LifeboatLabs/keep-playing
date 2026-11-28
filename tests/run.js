@@ -1135,6 +1135,85 @@ test("https: Keep Playing's own certificate works, and only for this computer", 
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('bringing a player back from a player file', async () => {
+  const { importPlayer, importFolder, describe, readPlayerFile } = require('../src/import');
+  const everything = {
+    GetUserAccountInfo: true, GetUserInventory: true, GetUserVirtualCurrency: true, GetUserData: true, GetUserReadOnlyData: true,
+    GetCharacterInventories: true, GetCharacterList: true, GetTitleData: false, GetPlayerStatistics: true, GetPlayerProfile: true,
+    ProfileConstraints: { ShowDisplayName: true, ShowLinkedAccounts: true, ShowStatistics: true },
+  };
+
+  // A player on the old server, with a bit of everything.
+  const old = await start();
+  const p = await old.player('ada-1815');
+  await old.ok('/Client/UpdateUserTitleDisplayName', { DisplayName: 'Ada' }, p.auth);
+  await old.ok('/Client/UpdateUserData', { Data: { level: '12', class: 'mage' }, Permission: 'Public' }, p.auth);
+  await old.ok('/Server/UpdateUserReadOnlyData', { PlayFabId: p.id, Data: { rank: 'gold' } }, old.secret);
+  const sword = (await old.ok('/Client/PurchaseItem', { ItemId: 'sword', VirtualCurrency: 'GO', Price: 100 }, p.auth)).Items[0];
+  await old.ok('/Server/UpdateUserInventoryItemCustomData', { PlayFabId: p.id, ItemInstanceId: sword.ItemInstanceId, Data: { sharpness: '3' } }, old.secret);
+  await old.ok('/Server/UpdatePlayerStatistics', { PlayFabId: p.id, Statistics: [{ StatisticName: 'HighScore', Value: 4200 }] }, old.secret);
+  const rex = await old.ok('/Server/GrantCharacterToUser', { PlayFabId: p.id, CharacterName: 'Rex', CharacterType: 'dog' }, old.secret);
+  await old.ok('/Server/GrantItemsToCharacter', { PlayFabId: p.id, CharacterId: rex.CharacterId, ItemIds: ['potion'] }, old.secret);
+  const file = await old.call('/Server/GetPlayerCombinedInfo', { PlayFabId: p.id, InfoRequestParameters: everything }, old.secret); // the whole answer
+  const was = file.data.InfoResultPayload;
+  await old.stop();
+
+  // A new server, where the player has already signed in once, before the import.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'kp-import-'));
+  const t = await start({ dataDir: dir });
+  const early = await t.player('ada-1815');
+  assert.notEqual(early.id, p.id);
+  const r = importPlayer(t.app, file, t.clock.now);
+  assert.deepEqual([r.imported, r.id, r.links, r.moved, r.items, r.statistics, r.characters],
+    [true, p.id, ['CustomId'], [{ kind: 'CustomId', from: early.id }], 2, 1, 1]);
+  assert.equal(describe(r), `Brought back Ada (${p.id}): 2 items, 1 statistic, 1 character; signs in with CustomId. Note: CustomId moved from player ${early.id}.`);
+
+  // Signing in the way they always did finds them again, with everything.
+  const back = await t.player('ada-1815');
+  assert.equal(back.id, p.id);
+  assert.equal(back.entityKey.Id, was.AccountInfo.TitleInfo.TitlePlayerAccount.Id);
+  const now = await t.ok('/Server/GetPlayerCombinedInfo', { PlayFabId: p.id, InfoRequestParameters: everything }, t.secret);
+  const is = now.InfoResultPayload;
+  for (const k of ['UserData', 'UserReadOnlyData', 'UserInventory', 'CharacterList', 'CharacterInventories', 'PlayerStatistics', 'UserDataVersion', 'UserReadOnlyDataVersion']) {
+    assert.deepEqual(is[k], was[k], k);
+  }
+  assert.equal(is.UserVirtualCurrency.GO, was.UserVirtualCurrency.GO);
+  assert.equal(is.UserInventory[0].CustomData.sharpness, '3');
+  assert.equal(is.AccountInfo.TitleInfo.DisplayName, 'Ada');
+  assert.equal(is.AccountInfo.Created, was.AccountInfo.Created);
+
+  // Importing it again changes nothing, and files that aren't player files say why.
+  assert.equal(importPlayer(t.app, file).imported, false);
+  assert.throws(() => readPlayerFile({ hello: 'world' }), /isn't a player file/);
+  assert.throws(() => readPlayerFile({ InfoResultPayload: {} }), /has no PlayFabId/);
+
+  // The import folder: files are brought back and moved to done; ones that can't be read stay put.
+  const folder = path.join(dir, 'import');
+  fs.mkdirSync(folder);
+  const other = JSON.parse(JSON.stringify(file.data));
+  other.PlayFabId = 'ABCDEF0123456789';
+  other.InfoResultPayload.AccountInfo.CustomIdInfo.CustomId = 'grace-1906';
+  other.InfoResultPayload.AccountInfo.TitleInfo.DisplayName = 'Grace';
+  other.InfoResultPayload.AccountInfo.TitleInfo.TitlePlayerAccount.Id = was.AccountInfo.TitleInfo.TitlePlayerAccount.Id; // taken: gets a new one
+  fs.writeFileSync(path.join(folder, 'grace.json'), JSON.stringify(other));
+  fs.writeFileSync(path.join(folder, 'broken.json'), '{ not json');
+  const got = importFolder(t.app, folder, t.clock.now);
+  assert.deepEqual(got.results.map((x) => [x.id, x.name, x.imported]), [['ABCDEF0123456789', 'Grace', true]]);
+  assert.equal(got.errors.length, 1);
+  assert.match(got.errors[0], /^broken\.json isn't a JSON file/);
+  assert.deepEqual([fs.existsSync(path.join(folder, 'done', 'grace.json')), fs.existsSync(path.join(folder, 'broken.json'))], [true, true]);
+  const grace = await t.player('grace-1906');
+  assert.equal(grace.id, 'ABCDEF0123456789');
+  assert.notEqual(grace.entityKey.Id, was.AccountInfo.TitleInfo.TitlePlayerAccount.Id);
+  await t.stop();
+
+  // It's kept: after a restart, signing in still finds the imported player.
+  const again = await start({ dataDir: dir });
+  assert.equal((await again.player('ada-1815')).id, p.id);
+  await again.stop();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test("connecting a game by name: its PlayFab address over https, the hosts file, and finding the title ID", async () => {
   const connect = require('../tools/connect');
   const { args } = require('../server');
