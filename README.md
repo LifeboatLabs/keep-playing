@@ -6,6 +6,8 @@
 - **bring players back** from their saved data, so their characters and items return with the game ([how](#bring-a-player-back));
 - **test a game offline** without touching your live PlayFab title, or using up the 1,000 players PlayFab's free Development Mode allows ([for developers](#for-developers-test-without-playfab)).
 
+![Keep Playing running with --verbose while a short test script plays the part of a game. The script signs in, buys a sword, runs a CloudScript function, checks the leaderboard and saves, and Keep Playing answers each call. One call it can't answer yet shows up as a note.](docs/demo.gif)
+
 It needs nothing but [Node.js](https://nodejs.org/) 22 or newer. There's nothing to install from npm and no database to set up.
 
 > Keep Playing is not made by, or affiliated with, Microsoft. PlayFab is a trademark of Microsoft.
